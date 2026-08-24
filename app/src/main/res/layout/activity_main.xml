@@ -14,7 +14,7 @@
         android:layout_weight="1"
         android:background="@android:color/black"
         app:use_controller="false"
-        app:resize_mode="zoom"
+        app:resize_mode="fit"
         app:surface_type="texture_view" />
 
     <androidx.media3.ui.PlayerView
@@ -24,7 +24,7 @@
         android:layout_weight="1"
         android:background="@android:color/black"
         app:use_controller="false"
-        app:resize_mode="zoom"
+        app:resize_mode="fit"
         app:surface_type="texture_view" />
 
     <androidx.media3.ui.PlayerView
@@ -34,7 +34,7 @@
         android:layout_weight="1"
         android:background="@android:color/black"
         app:use_controller="false"
-        app:resize_mode="zoom"
+        app:resize_mode="fit"
         app:surface_type="texture_view" />
 
 </LinearLayout>
