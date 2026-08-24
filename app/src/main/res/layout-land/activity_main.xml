@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/rootLayout"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@android:color/black"
+    android:orientation="horizontal">
+
+    <androidx.media3.ui.PlayerView
+        android:id="@+id/playerView1"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="1"
+        android:background="@android:color/black"
+        app:use_controller="false"
+        app:resize_mode="zoom"
+        app:surface_type="texture_view" />
+
+    <androidx.media3.ui.PlayerView
+        android:id="@+id/playerView2"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="1"
+        android:background="@android:color/black"
+        app:use_controller="false"
+        app:resize_mode="zoom"
+        app:surface_type="texture_view" />
+
+    <androidx.media3.ui.PlayerView
+        android:id="@+id/playerView3"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="1"
+        android:background="@android:color/black"
+        app:use_controller="false"
+        app:resize_mode="zoom"
+        app:surface_type="texture_view" />
+
+</LinearLayout>

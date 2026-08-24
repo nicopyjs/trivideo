@@ -1,0 +1,15 @@
+*.iml
+.gradle
+local.properties
+.idea/
+.DS_Store
+build/
+captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.ap_
+*.aab
+
+# Keep the Gradle wrapper jar despite the build/ ignore above
+!gradle/wrapper/gradle-wrapper.jar
