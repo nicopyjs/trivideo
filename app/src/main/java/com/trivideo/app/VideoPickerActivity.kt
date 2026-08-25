@@ -20,7 +20,6 @@ import com.trivideo.app.databinding.ActivityVideoPickerBinding
 import com.trivideo.app.databinding.ItemVideoPickerFolderBinding
 import com.trivideo.app.databinding.ItemVideoPickerVideoBinding
 import java.io.File
-import java.util.concurrent.Executors
 
 class VideoPickerActivity : AppCompatActivity() {
 
@@ -219,10 +218,20 @@ class VideoPickerActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Cola LIFO (no FIFO): al pedir una miniatura, se va siempre al frente. Asi, si el usuario
+     * scrollea rapido, lo ultimo pedido (lo que esta en pantalla ahora) se procesa antes que
+     * pedidos viejos de items por los que ya paso, en vez de esperar en orden de llegada.
+     */
     private object ThumbnailLoader {
-        private val cache = LruCache<String, Bitmap>(40)
-        private val executor = Executors.newFixedThreadPool(3)
+        private const val THREAD_COUNT = 3
+
+        private val cache = LruCache<String, Bitmap>(60)
+        private val pending = ArrayDeque<String>()
+        private val callbacks = mutableMapOf<String, MutableList<(Bitmap?) -> Unit>>()
         private val mainHandler = Handler(Looper.getMainLooper())
+        private val lock = Any()
+        private var activeThreads = 0
 
         fun load(path: String, onReady: (Bitmap?) -> Unit) {
             val cached = cache.get(path)
@@ -230,10 +239,31 @@ class VideoPickerActivity : AppCompatActivity() {
                 onReady(cached)
                 return
             }
-            executor.execute {
+            synchronized(lock) {
+                pending.remove(path)
+                pending.addFirst(path)
+                callbacks.getOrPut(path) { mutableListOf() }.add(onReady)
+                if (activeThreads < THREAD_COUNT) {
+                    activeThreads++
+                    Thread { workerLoop() }.start()
+                }
+            }
+        }
+
+        private fun workerLoop() {
+            while (true) {
+                val path = synchronized(lock) {
+                    val next = pending.removeFirstOrNull()
+                    if (next == null) {
+                        activeThreads--
+                        return
+                    }
+                    next
+                }
                 val bitmap = decode(path)
                 if (bitmap != null) cache.put(path, bitmap)
-                mainHandler.post { onReady(bitmap) }
+                val pathCallbacks = synchronized(lock) { callbacks.remove(path) }
+                pathCallbacks?.forEach { callback -> mainHandler.post { callback(bitmap) } }
             }
         }
 
