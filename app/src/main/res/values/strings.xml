@@ -8,4 +8,8 @@
     <string name="hold_to_pick">Mantén presionado\npara elegir video</string>
     <string name="video_load_error">Error al cargar el video</string>
     <string name="video_error_toast">No se pudo reproducir el video %1$d</string>
+    <string name="update_available">Hay una actualización disponible</string>
+    <string name="update_now">Actualizar</string>
+    <string name="downloading_update">Descargando actualización…</string>
+    <string name="dismiss">Cerrar</string>
 </resources>
