@@ -22,7 +22,6 @@ import android.view.WindowManager
 import android.widget.LinearLayout
 import android.widget.SeekBar
 import android.widget.Toast
-import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
@@ -77,14 +76,14 @@ class MainActivity : AppCompatActivity() {
     }
 
     private val pickAllVideosLauncher =
-        registerForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(MAX_PANELS)) { uris ->
+        registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
             if (uris.isNotEmpty()) {
                 handlePickedAllUris(uris)
             }
         }
 
     private val pickSingleVideoLauncher =
-        registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
             if (uri != null && replaceTargetIndex in 0 until activePanelCount) {
                 handlePickedSingleUri(replaceTargetIndex, uri)
             }
@@ -182,9 +181,7 @@ class MainActivity : AppCompatActivity() {
 
                 override fun onDoubleTap(e: MotionEvent): Boolean {
                     replaceTargetIndex = index
-                    pickSingleVideoLauncher.launch(
-                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly)
-                    )
+                    pickSingleVideoLauncher.launch(arrayOf("video/*"))
                     return true
                 }
 
@@ -324,9 +321,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun launchPickerForAll() {
-        pickAllVideosLauncher.launch(
-            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly)
-        )
+        pickAllVideosLauncher.launch(arrayOf("video/*"))
     }
 
     private fun handlePickedAllUris(uris: List<Uri>) {
@@ -385,15 +380,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun takePersistablePermission(uri: Uri) {
-        try {
-            contentResolver.takePersistableUriPermission(
-                uri,
-                android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
-            )
-        } catch (_: SecurityException) {
-            // El Photo Picker no siempre permite persistir el acceso entre reinicios de la app;
-            // el video igual funciona en esta sesion, solo puede pedir elegirlo de nuevo despues.
-        }
+        contentResolver.takePersistableUriPermission(
+            uri,
+            android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+        )
     }
 
     private fun uriKey(index: Int) = "uri_$index"
@@ -489,7 +479,6 @@ class MainActivity : AppCompatActivity() {
                 override fun onPlayerError(error: PlaybackException) {
                     panel.progressBar.visibility = View.GONE
                     panel.labelFilename.text = getString(R.string.video_load_error)
-                    revealOverlayUi()
                     Toast.makeText(
                         this@MainActivity,
                         getString(R.string.video_error_toast, i + 1),
