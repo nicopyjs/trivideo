@@ -1,40 +1,50 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/rootLayout"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@android:color/black"
-    android:orientation="vertical">
+    android:background="@android:color/black">
 
-    <androidx.media3.ui.PlayerView
-        android:id="@+id/playerView1"
+    <LinearLayout
+        android:id="@+id/playersContainer"
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        android:background="@android:color/black"
-        app:use_controller="false"
-        app:resize_mode="fit"
-        app:surface_type="texture_view" />
+        android:layout_height="match_parent"
+        android:orientation="vertical">
 
-    <androidx.media3.ui.PlayerView
-        android:id="@+id/playerView2"
+        <include
+            android:id="@+id/panel1"
+            layout="@layout/panel_cell"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+
+        <include
+            android:id="@+id/panel2"
+            layout="@layout/panel_cell"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+
+        <include
+            android:id="@+id/panel3"
+            layout="@layout/panel_cell"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+
+    </LinearLayout>
+
+    <include
+        android:id="@+id/controlBar"
+        layout="@layout/control_bar"
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        android:background="@android:color/black"
-        app:use_controller="false"
-        app:resize_mode="fit"
-        app:surface_type="texture_view" />
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom" />
 
-    <androidx.media3.ui.PlayerView
-        android:id="@+id/playerView3"
+    <include
+        android:id="@+id/emptyState"
+        layout="@layout/empty_state"
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        android:background="@android:color/black"
-        app:use_controller="false"
-        app:resize_mode="fit"
-        app:surface_type="texture_view" />
+        android:layout_height="match_parent" />
 
-</LinearLayout>
+</FrameLayout>
