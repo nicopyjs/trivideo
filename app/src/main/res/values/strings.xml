@@ -1,13 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">TriVideo</string>
-    <string name="empty_state_subtitle">Elige 3 videos para reproducirlos al mismo tiempo, uno en cada panel</string>
+    <string name="empty_state_subtitle">Elige entre 2 y 4 videos para reproducirlos al mismo tiempo, uno en cada panel</string>
     <string name="pick_videos">Elegir videos</string>
     <string name="change_videos">Cambiar videos</string>
     <string name="play_pause">Reproducir o pausar todos los videos</string>
-    <string name="hold_to_pick">Mantén presionado\npara elegir video</string>
     <string name="video_load_error">Error al cargar el video</string>
     <string name="video_error_toast">No se pudo reproducir el video %1$d</string>
+    <string name="min_videos_toast">Elige al menos 2 videos</string>
+    <string name="max_videos_toast">Solo se usarán los primeros 4 videos elegidos</string>
     <string name="update_available">Hay una actualización disponible</string>
     <string name="update_now">Actualizar</string>
     <string name="downloading_update">Descargando actualización…</string>

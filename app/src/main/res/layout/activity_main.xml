@@ -6,33 +6,10 @@
     android:background="@android:color/black">
 
     <LinearLayout
-        android:id="@+id/playersContainer"
+        android:id="@+id/playersRoot"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:orientation="vertical">
-
-        <include
-            android:id="@+id/panel1"
-            layout="@layout/panel_cell"
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1" />
-
-        <include
-            android:id="@+id/panel2"
-            layout="@layout/panel_cell"
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1" />
-
-        <include
-            android:id="@+id/panel3"
-            layout="@layout/panel_cell"
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1" />
-
-    </LinearLayout>
+        android:orientation="vertical" />
 
     <include
         android:id="@+id/controlBar"
