@@ -5,13 +5,24 @@
     <string name="pick_videos">Elegir videos</string>
     <string name="change_videos">Cambiar videos</string>
     <string name="play_pause">Reproducir o pausar todos los videos</string>
-    <string name="video_load_error">Error al cargar el video</string>
+    <string name="video_load_error">Doble tap para volver a elegir este video</string>
     <string name="video_error_toast">No se pudo reproducir el video %1$d</string>
-    <string name="min_videos_toast">Elige al menos 2 videos</string>
-    <string name="max_videos_toast">Solo se usarán los primeros 4 videos elegidos</string>
     <string name="update_available">Hay una actualización disponible</string>
     <string name="update_now">Actualizar</string>
     <string name="downloading_update">Descargando actualización…</string>
     <string name="dismiss">Cerrar</string>
     <string name="volume">Volumen del video seleccionado</string>
+
+    <string name="storage_permission_title">Acceso a tus videos</string>
+    <string name="storage_permission_message">TriVideo necesita acceso a todos los archivos para poder listar tus videos con miniaturas reales, sin importar en qué carpeta estén. Se abrirán los Ajustes de Android: activa \"Permitir acceso a todos los archivos\" y vuelve.</string>
+    <string name="go_to_settings">Ir a Ajustes</string>
+    <string name="cancel">Cancelar</string>
+
+    <string name="picker_title">Elegir videos</string>
+    <string name="picker_up_folder">Subir un nivel</string>
+    <string name="picker_done">Listo</string>
+    <string name="picker_selected_count">%1$d/%2$d seleccionados</string>
+    <string name="picker_max_reached_toast">Ya elegiste el máximo de %1$d videos</string>
+    <string name="picker_empty_folder">Esta carpeta no tiene videos ni subcarpetas</string>
+    <string name="picker_storage_root_label">Almacenamiento</string>
 </resources>

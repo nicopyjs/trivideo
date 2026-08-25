@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="110dp"
+    android:layout_margin="4dp"
+    android:background="@android:color/black">
+
+    <ImageView
+        android:id="@+id/ivThumbnail"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="centerCrop"
+        android:background="#33FFFFFF"
+        android:contentDescription="@null" />
+
+    <TextView
+        android:id="@+id/tvVideoName"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:background="#99000000"
+        android:padding="4dp"
+        android:textColor="@android:color/white"
+        android:textSize="11sp"
+        android:maxLines="1"
+        android:ellipsize="end" />
+
+    <View
+        android:id="@+id/selectedOverlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#662196F3"
+        android:visibility="gone" />
+
+    <ImageView
+        android:id="@+id/ivSelectedCheck"
+        android:layout_width="22dp"
+        android:layout_height="22dp"
+        android:layout_gravity="top|end"
+        android:layout_margin="4dp"
+        android:src="@drawable/ic_check_circle"
+        android:background="#FFFFFFFF"
+        android:visibility="gone"
+        android:contentDescription="@null" />
+
+</FrameLayout>

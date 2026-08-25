@@ -1,5 +1,6 @@
 package com.trivideo.app
 
+import android.Manifest
 import android.app.DownloadManager
 import android.content.BroadcastReceiver
 import android.content.ClipData
@@ -7,12 +8,16 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.SharedPreferences
+import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.os.Environment
 import android.os.Handler
 import android.os.Looper
 import android.provider.OpenableColumns
+import android.provider.Settings
 import android.view.DragEvent
 import android.view.GestureDetector
 import android.view.MotionEvent
@@ -24,6 +29,7 @@ import android.widget.SeekBar
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.core.view.WindowCompat
@@ -34,6 +40,7 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.VideoSize
 import androidx.media3.exoplayer.ExoPlayer
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.trivideo.app.databinding.ActivityMainBinding
 import com.trivideo.app.databinding.PanelCellBinding
 import org.json.JSONObject
@@ -75,18 +82,22 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private val pickAllVideosLauncher =
-        registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
-            if (uris.isNotEmpty()) {
-                handlePickedAllUris(uris)
+    private val videoPickerLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            val paths = if (result.resultCode == RESULT_OK) {
+                result.data?.getStringArrayListExtra(VideoPickerActivity.EXTRA_SELECTED_PATHS)
+            } else {
+                null
             }
-        }
-
-    private val pickSingleVideoLauncher =
-        registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-            if (uri != null && replaceTargetIndex in 0 until activePanelCount) {
-                handlePickedSingleUri(replaceTargetIndex, uri)
+            if (!paths.isNullOrEmpty()) {
+                val uris = paths.map { Uri.fromFile(File(it)) }
+                if (replaceTargetIndex in 0 until activePanelCount) {
+                    handlePickedSingleUri(replaceTargetIndex, uris.first())
+                } else {
+                    handlePickedAllUris(uris)
+                }
             }
+            replaceTargetIndex = -1
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -180,8 +191,16 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 override fun onDoubleTap(e: MotionEvent): Boolean {
+                    if (!hasStorageAccess()) {
+                        requestStorageAccess()
+                        return true
+                    }
                     replaceTargetIndex = index
-                    pickSingleVideoLauncher.launch(arrayOf("video/*"))
+                    videoPickerLauncher.launch(
+                        Intent(this@MainActivity, VideoPickerActivity::class.java)
+                            .putExtra(VideoPickerActivity.EXTRA_MAX_SELECTION, 1)
+                            .putExtra(VideoPickerActivity.EXTRA_MIN_SELECTION, 1)
+                    )
                     return true
                 }
 
@@ -321,22 +340,55 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun launchPickerForAll() {
-        pickAllVideosLauncher.launch(arrayOf("video/*"))
+        if (!hasStorageAccess()) {
+            requestStorageAccess()
+            return
+        }
+        replaceTargetIndex = -1
+        videoPickerLauncher.launch(
+            Intent(this, VideoPickerActivity::class.java)
+                .putExtra(VideoPickerActivity.EXTRA_MAX_SELECTION, MAX_PANELS)
+                .putExtra(VideoPickerActivity.EXTRA_MIN_SELECTION, MIN_PANELS)
+        )
+    }
+
+    private fun hasStorageAccess(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            Environment.isExternalStorageManager()
+        } else {
+            ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.READ_EXTERNAL_STORAGE
+            ) == PackageManager.PERMISSION_GRANTED
+        }
+    }
+
+    private fun requestStorageAccess() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.storage_permission_title)
+                .setMessage(R.string.storage_permission_message)
+                .setPositiveButton(R.string.go_to_settings) { _, _ ->
+                    val intent = Intent(
+                        Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                        Uri.parse("package:$packageName")
+                    )
+                    startActivity(intent)
+                }
+                .setNegativeButton(R.string.cancel, null)
+                .show()
+        } else {
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE),
+                REQUEST_STORAGE_PERMISSION
+            )
+        }
     }
 
     private fun handlePickedAllUris(uris: List<Uri>) {
-        if (uris.size < MIN_PANELS) {
-            Toast.makeText(this, getString(R.string.min_videos_toast), Toast.LENGTH_SHORT).show()
-            return
-        }
-        if (uris.size > MAX_PANELS) {
-            Toast.makeText(this, getString(R.string.max_videos_toast), Toast.LENGTH_SHORT).show()
-        }
-
         val chosen = uris.take(MAX_PANELS)
-        for (uri in chosen) {
-            takePersistablePermission(uri)
-        }
+        if (chosen.size < MIN_PANELS) return
 
         val editor = prefs.edit()
         editor.putInt(PANEL_COUNT_KEY, chosen.size)
@@ -363,7 +415,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun handlePickedSingleUri(index: Int, uri: Uri) {
-        takePersistablePermission(uri)
         prefs.edit()
             .putString(uriKey(index), uri.toString())
             .remove(positionKey(index))
@@ -377,13 +428,6 @@ class MainActivity : AppCompatActivity() {
         player.setMediaItem(MediaItem.fromUri(uri))
         player.prepare()
         player.playWhenReady = isPlaying
-    }
-
-    private fun takePersistablePermission(uri: Uri) {
-        contentResolver.takePersistableUriPermission(
-            uri,
-            android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
-        )
     }
 
     private fun uriKey(index: Int) = "uri_$index"
@@ -428,6 +472,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun queryDisplayName(uri: Uri): String {
+        if (uri.scheme == "file") {
+            return uri.lastPathSegment.orEmpty()
+        }
         contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
             ?.use { cursor ->
                 val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
@@ -688,5 +735,6 @@ class MainActivity : AppCompatActivity() {
         private const val MIN_PANELS = 2
         private const val MAX_PANELS = 4
         private const val DEFAULT_PANEL_COUNT = 3
+        private const val REQUEST_STORAGE_PERMISSION = 1001
     }
 }
