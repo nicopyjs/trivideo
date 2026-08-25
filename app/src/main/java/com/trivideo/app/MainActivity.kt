@@ -3,6 +3,8 @@ package com.trivideo.app
 import android.content.SharedPreferences
 import android.net.Uri
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.provider.OpenableColumns
 import android.view.GestureDetector
 import android.view.MotionEvent
@@ -31,6 +33,9 @@ class MainActivity : AppCompatActivity() {
     private var activeIndex: Int = -1
     private var isPlaying: Boolean = true
     private var replaceTargetIndex: Int = -1
+
+    private val uiHandler = Handler(Looper.getMainLooper())
+    private val hideOverlayRunnable = Runnable { hideOverlayUi() }
 
     private val pickAllVideosLauncher =
         registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
@@ -109,7 +114,7 @@ class MainActivity : AppCompatActivity() {
     private fun onPanelSingleTap(index: Int) {
         activeIndex = if (activeIndex == index) -1 else index
         applyVolumes()
-        updatePanelHighlights()
+        revealOverlayUi()
     }
 
     private fun applyVolumes() {
@@ -132,6 +137,27 @@ class MainActivity : AppCompatActivity() {
         binding.controlBar.btnPlayPause.setImageResource(
             if (isPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play
         )
+        revealOverlayUi()
+    }
+
+    private fun revealOverlayUi() {
+        uiHandler.removeCallbacks(hideOverlayRunnable)
+        binding.controlBar.root.visibility = View.VISIBLE
+        for (panel in panels) {
+            panel.labelFilename.visibility = View.VISIBLE
+        }
+        updatePanelHighlights()
+        if (isPlaying) {
+            uiHandler.postDelayed(hideOverlayRunnable, AUTO_HIDE_DELAY_MS)
+        }
+    }
+
+    private fun hideOverlayUi() {
+        binding.controlBar.root.visibility = View.GONE
+        for (panel in panels) {
+            panel.labelFilename.visibility = View.GONE
+            panel.activeBorder.visibility = View.GONE
+        }
     }
 
     private fun launchPickerForAll() {
@@ -214,10 +240,11 @@ class MainActivity : AppCompatActivity() {
 
     private fun showPlayersUi() {
         binding.emptyState.root.visibility = View.GONE
-        binding.controlBar.root.visibility = View.VISIBLE
+        revealOverlayUi()
     }
 
     private fun showEmptyStateUi() {
+        uiHandler.removeCallbacks(hideOverlayRunnable)
         binding.emptyState.root.visibility = View.VISIBLE
         binding.controlBar.root.visibility = View.GONE
     }
@@ -250,7 +277,6 @@ class MainActivity : AppCompatActivity() {
             panel.playerView.player = player
         }
         activeIndex = -1
-        updatePanelHighlights()
         binding.controlBar.btnPlayPause.setImageResource(
             if (isPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play
         )
@@ -278,6 +304,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onStop() {
+        uiHandler.removeCallbacksAndMessages(null)
         releasePlayers()
         super.onStop()
     }
@@ -285,5 +312,6 @@ class MainActivity : AppCompatActivity() {
     companion object {
         private const val PLAYER_COUNT = 3
         private const val PREFS_NAME = "trivideo_prefs"
+        private const val AUTO_HIDE_DELAY_MS = 2000L
     }
 }
