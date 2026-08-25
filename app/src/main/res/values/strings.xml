@@ -5,7 +5,7 @@
     <string name="pick_videos">Elegir videos</string>
     <string name="change_videos">Cambiar videos</string>
     <string name="play_pause">Reproducir o pausar todos los videos</string>
-    <string name="video_load_error">Error al cargar el video</string>
+    <string name="video_load_error">Doble tap para volver a elegir este video</string>
     <string name="video_error_toast">No se pudo reproducir el video %1$d</string>
     <string name="min_videos_toast">Elige al menos 2 videos</string>
     <string name="max_videos_toast">Solo se usarán los primeros 4 videos elegidos</string>
