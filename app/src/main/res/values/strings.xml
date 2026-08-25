@@ -10,6 +10,7 @@
     <string name="update_available">Hay una actualización disponible</string>
     <string name="update_now">Actualizar</string>
     <string name="downloading_update">Descargando actualización…</string>
+    <string name="update_download_failed">Falló la descarga, toca Actualizar para reintentar</string>
     <string name="dismiss">Cerrar</string>
     <string name="volume">Volumen del video seleccionado</string>
 

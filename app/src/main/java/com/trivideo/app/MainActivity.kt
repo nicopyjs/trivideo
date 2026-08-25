@@ -702,6 +702,10 @@ class MainActivity : AppCompatActivity() {
         binding.updateBanner.btnUpdate.isEnabled = false
         binding.updateBanner.tvUpdateMessage.text = getString(R.string.downloading_update)
 
+        // Si quedaba un APK de una actualizacion anterior, borrarlo: si la descarga nueva
+        // fallara silenciosamente, no queremos terminar instalando el archivo viejo.
+        File(getExternalFilesDir(null), UPDATE_APK_FILENAME).delete()
+
         val request = DownloadManager.Request(Uri.parse(apkUrl))
             .setTitle(getString(R.string.app_name))
             .setDestinationInExternalFilesDir(this, null, UPDATE_APK_FILENAME)
@@ -712,6 +716,20 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun installDownloadedApk() {
+        val downloadManager = getSystemService(DOWNLOAD_SERVICE) as DownloadManager
+        val query = DownloadManager.Query().setFilterById(pendingDownloadId)
+        val succeeded = downloadManager.query(query)?.use { cursor ->
+            val statusIndex = cursor.getColumnIndex(DownloadManager.COLUMN_STATUS)
+            cursor.moveToFirst() && statusIndex >= 0 &&
+                cursor.getInt(statusIndex) == DownloadManager.STATUS_SUCCESSFUL
+        } ?: false
+
+        if (!succeeded) {
+            binding.updateBanner.btnUpdate.isEnabled = true
+            binding.updateBanner.tvUpdateMessage.text = getString(R.string.update_download_failed)
+            return
+        }
+
         val file = File(getExternalFilesDir(null), UPDATE_APK_FILENAME)
         if (!file.exists()) return
 
