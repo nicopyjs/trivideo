@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">TriVideo</string>
-    <string name="empty_state_subtitle">Elige entre 2 y 4 videos para reproducirlos al mismo tiempo, uno en cada panel</string>
+    <string name="empty_state_subtitle">Elige entre 2 y 4 videos para reproducirlos al mismo tiempo, uno en cada panel.\nToca dos veces un panel para cambiar su video, y mantenlo presionado y arrastra para reordenarlos.</string>
     <string name="pick_videos">Elegir videos</string>
     <string name="change_videos">Cambiar videos</string>
     <string name="play_pause">Reproducir o pausar todos los videos</string>
@@ -13,4 +13,5 @@
     <string name="update_now">Actualizar</string>
     <string name="downloading_update">Descargando actualización…</string>
     <string name="dismiss">Cerrar</string>
+    <string name="volume">Volumen del video seleccionado</string>
 </resources>

@@ -2,6 +2,7 @@ package com.trivideo.app
 
 import android.app.DownloadManager
 import android.content.BroadcastReceiver
+import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -12,12 +13,14 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.provider.OpenableColumns
+import android.view.DragEvent
 import android.view.GestureDetector
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.LinearLayout
+import android.widget.SeekBar
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -55,6 +58,8 @@ class MainActivity : AppCompatActivity() {
     private var activeIndex: Int = -1
     private var isPlaying: Boolean = true
     private var replaceTargetIndex: Int = -1
+    private var volumeLevel: Int = 100
+    private var draggingView: View? = null
 
     private val uiHandler = Handler(Looper.getMainLooper())
     private val hideOverlayRunnable = Runnable { hideOverlayUi() }
@@ -91,6 +96,7 @@ class MainActivity : AppCompatActivity() {
 
         panels = List(MAX_PANELS) { PanelCellBinding.inflate(layoutInflater) }
         prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+        volumeLevel = prefs.getInt(VOLUME_KEY, 100)
 
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         setupImmersiveMode()
@@ -140,6 +146,26 @@ class MainActivity : AppCompatActivity() {
     private fun setupControlBar() {
         binding.controlBar.btnChangeVideos.setOnClickListener { launchPickerForAll() }
         binding.controlBar.btnPlayPause.setOnClickListener { toggleMasterPlayPause() }
+
+        binding.controlBar.volumeSeekBar.progress = volumeLevel
+        binding.controlBar.volumeSeekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
+                if (!fromUser) return
+                volumeLevel = progress
+                prefs.edit().putInt(VOLUME_KEY, volumeLevel).apply()
+                applyVolumes()
+            }
+
+            override fun onStartTrackingTouch(seekBar: SeekBar) {
+                uiHandler.removeCallbacks(hideOverlayRunnable)
+            }
+
+            override fun onStopTrackingTouch(seekBar: SeekBar) {
+                if (isPlaying) {
+                    uiHandler.postDelayed(hideOverlayRunnable, AUTO_HIDE_DELAY_MS)
+                }
+            }
+        })
     }
 
     private fun setupPanels() {
@@ -153,16 +179,95 @@ class MainActivity : AppCompatActivity() {
                     return true
                 }
 
-                override fun onLongPress(e: MotionEvent) {
+                override fun onDoubleTap(e: MotionEvent): Boolean {
                     replaceTargetIndex = index
                     pickSingleVideoLauncher.launch(arrayOf("video/*"))
+                    return true
+                }
+
+                override fun onLongPress(e: MotionEvent) {
+                    startPanelDrag(index)
                 }
             })
             panel.playerView.setOnTouchListener { _, event ->
                 detector.onTouchEvent(event)
                 true
             }
+            panel.root.setOnDragListener { view, event -> onPanelDragEvent(index, view, event) }
         }
+    }
+
+    private fun startPanelDrag(index: Int) {
+        if (index >= activePanelCount) return
+        val cell = panels[index].root
+        draggingView = cell
+        cell.alpha = 0.4f
+        val shadow = View.DragShadowBuilder(cell)
+        cell.startDragAndDrop(ClipData.newPlainText("panelIndex", index.toString()), shadow, index, 0)
+    }
+
+    private fun onPanelDragEvent(targetIndex: Int, view: View, event: DragEvent): Boolean {
+        when (event.action) {
+            DragEvent.ACTION_DRAG_STARTED -> return true
+            DragEvent.ACTION_DRAG_ENTERED -> {
+                view.alpha = if (view === draggingView) 0.4f else 0.7f
+                return true
+            }
+            DragEvent.ACTION_DRAG_EXITED -> {
+                if (view !== draggingView) view.alpha = 1f
+                return true
+            }
+            DragEvent.ACTION_DROP -> {
+                view.alpha = 1f
+                val sourceIndex = event.localState as? Int ?: return false
+                if (sourceIndex != targetIndex &&
+                    sourceIndex in 0 until activePanelCount &&
+                    targetIndex in 0 until activePanelCount
+                ) {
+                    swapPanels(sourceIndex, targetIndex)
+                }
+                return true
+            }
+            DragEvent.ACTION_DRAG_ENDED -> {
+                for (i in 0 until activePanelCount) {
+                    panels[i].root.alpha = 1f
+                }
+                draggingView = null
+                return true
+            }
+            else -> return true
+        }
+    }
+
+    private fun swapPanels(a: Int, b: Int) {
+        val playerA = players[a]
+        val playerB = players[b]
+        players[a] = playerB
+        players[b] = playerA
+        panels[a].playerView.player = players[a]
+        panels[b].playerView.player = players[b]
+
+        val aspectA = videoAspects[a]
+        videoAspects[a] = videoAspects[b]
+        videoAspects[b] = aspectA
+
+        val labelA = panels[a].labelFilename.text
+        panels[a].labelFilename.text = panels[b].labelFilename.text
+        panels[b].labelFilename.text = labelA
+
+        val uriA = prefs.getString(uriKey(a), null)
+        val uriB = prefs.getString(uriKey(b), null)
+        val posA = prefs.getLong(positionKey(a), 0L)
+        val posB = prefs.getLong(positionKey(b), 0L)
+        val editor = prefs.edit()
+        if (uriB != null) editor.putString(uriKey(a), uriB) else editor.remove(uriKey(a))
+        if (uriA != null) editor.putString(uriKey(b), uriA) else editor.remove(uriKey(b))
+        editor.putLong(positionKey(a), posB)
+        editor.putLong(positionKey(b), posA)
+        editor.apply()
+
+        applyVolumes()
+        updatePanelHighlights()
     }
 
     private fun onPanelSingleTap(index: Int) {
@@ -172,8 +277,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun applyVolumes() {
+        val level = volumeLevel / 100f
         for (i in 0 until activePanelCount) {
-            players[i]?.volume = if (i == activeIndex) 1f else 0f
+            players[i]?.volume = if (i == activeIndex) level else 0f
         }
     }
 
@@ -235,6 +341,7 @@ class MainActivity : AppCompatActivity() {
         val editor = prefs.edit()
         editor.putInt(PANEL_COUNT_KEY, chosen.size)
         for (i in 0 until MAX_PANELS) {
+            editor.remove(positionKey(i))
             if (i < chosen.size) {
                 editor.putString(uriKey(i), chosen[i].toString())
             } else {
@@ -257,7 +364,10 @@ class MainActivity : AppCompatActivity() {
 
     private fun handlePickedSingleUri(index: Int, uri: Uri) {
         takePersistablePermission(uri)
-        prefs.edit().putString(uriKey(index), uri.toString()).apply()
+        prefs.edit()
+            .putString(uriKey(index), uri.toString())
+            .remove(positionKey(index))
+            .apply()
 
         showPlayersUi()
         val player = players[index] ?: return
@@ -278,6 +388,17 @@ class MainActivity : AppCompatActivity() {
 
     private fun uriKey(index: Int) = "uri_$index"
 
+    private fun positionKey(index: Int) = "pos_$index"
+
+    private fun savePlaybackPositions() {
+        val editor = prefs.edit()
+        for (i in 0 until activePanelCount) {
+            val position = players[i]?.currentPosition ?: continue
+            editor.putLong(positionKey(i), position)
+        }
+        editor.apply()
+    }
+
     private fun getSavedUris(): Array<Uri?> =
         Array(MAX_PANELS) { i -> prefs.getString(uriKey(i), null)?.let { Uri.parse(it) } }
 
@@ -297,6 +418,10 @@ class MainActivity : AppCompatActivity() {
             panels[i].labelFilename.text = queryDisplayName(uri)
             panels[i].progressBar.visibility = View.VISIBLE
             player.setMediaItem(MediaItem.fromUri(uri))
+            val savedPosition = prefs.getLong(positionKey(i), 0L)
+            if (savedPosition > 0L) {
+                player.seekTo(savedPosition)
+            }
             player.prepare()
             player.playWhenReady = isPlaying
         }
@@ -472,6 +597,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onStop() {
         uiHandler.removeCallbacksAndMessages(null)
+        savePlaybackPositions()
         releasePlayers()
         super.onStop()
     }
@@ -554,6 +680,7 @@ class MainActivity : AppCompatActivity() {
     companion object {
         private const val PREFS_NAME = "trivideo_prefs"
         private const val PANEL_COUNT_KEY = "panel_count"
+        private const val VOLUME_KEY = "volume_level"
         private const val AUTO_HIDE_DELAY_MS = 2000L
         private const val GITHUB_OWNER = "nicopyjs"
         private const val GITHUB_REPO = "trivideo"
