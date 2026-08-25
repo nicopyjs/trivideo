@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.SharedPreferences
+import android.content.res.Configuration
 import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
@@ -125,6 +126,13 @@ class MainActivity : AppCompatActivity() {
         if (hasFocus) setupImmersiveMode()
     }
 
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        setupImmersiveMode()
+        // El tamano de playersRoot recien queda actualizado despues del proximo layout pass.
+        binding.playersRoot.post { maybeRebuildGrid() }
+    }
+
     private fun setupEmptyState() {
         binding.emptyState.btnPickVideos.setOnClickListener { launchPickerForAll() }
     }
@@ -238,6 +246,7 @@ class MainActivity : AppCompatActivity() {
         activePanelCount = chosen.size
         videoAspects = arrayOfNulls(MAX_PANELS)
         currentGridShape = null
+        isPlaying = true
         releasePlayers()
         createPlayers()
         maybeRebuildGrid()
@@ -289,6 +298,7 @@ class MainActivity : AppCompatActivity() {
             panels[i].progressBar.visibility = View.VISIBLE
             player.setMediaItem(MediaItem.fromUri(uri))
             player.prepare()
+            player.playWhenReady = isPlaying
         }
     }
 
