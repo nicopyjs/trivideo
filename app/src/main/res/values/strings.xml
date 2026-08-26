@@ -58,6 +58,9 @@
     <string name="auto_rotate_interval_toast">Auto-rotación cada %1$d s</string>
     <string name="auto_rotate_off">Rotar: off</string>
     <string name="auto_rotate_on">Rotar: %1$ds</string>
+    <string name="pin_current">Fijar estos</string>
+    <string name="pinned_toast">Listo: ahora estos videos se repiten en loop</string>
+    <string name="save_current_set">Guardar set</string>
     <string name="layout_auto">Auto</string>
     <string name="layout_one_col">Columna</string>
     <string name="layout_one_row">Fila</string>

@@ -254,6 +254,8 @@ class MainActivity : AppCompatActivity() {
             true
         }
         binding.controlBar.btnLock.setOnClickListener { setLocked(true) }
+        binding.controlBar.btnPin.setOnClickListener { pinCurrentAsFixed() }
+        binding.controlBar.btnSaveSet.setOnClickListener { saveCurrentAsSet() }
 
         binding.controlBar.volumeSeekBar.progress = volumeLevel
         binding.controlBar.volumeSeekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
@@ -428,6 +430,8 @@ class MainActivity : AppCompatActivity() {
     private fun revealOverlayUi() {
         uiHandler.removeCallbacks(hideOverlayRunnable)
         binding.controlBar.root.visibility = View.VISIBLE
+        binding.controlBar.btnPin.visibility =
+            if (appMode == MODE_POOL) View.VISIBLE else View.GONE
         for (i in 0 until activePanelCount) {
             panels[i].labelFilename.visibility = View.VISIBLE
         }
@@ -1033,6 +1037,59 @@ class MainActivity : AppCompatActivity() {
         player.setMediaItem(MediaItem.fromUri(uri))
         player.prepare()
         player.playWhenReady = isPlaying
+    }
+
+    /**
+     * "Fijar estos": deja de rotar y pasa los clips que estan sonando ahora a modo
+     * repetitivo (loop). No abre el selector: usa lo que ya hay en cada panel.
+     */
+    private fun pinCurrentAsFixed() {
+        if (appMode != MODE_POOL) return
+        appMode = MODE_FIXED
+        prefs.edit().putString(MODE_KEY, MODE_FIXED).apply()
+
+        uiHandler.removeCallbacks(autoRotateRunnable)
+        if (autoRotateEnabled) {
+            autoRotateEnabled = false
+            prefs.edit().putBoolean(AUTO_ROTATE_KEY, false).apply()
+            updateAutoRotateLabel()
+        }
+        for (i in 0 until activePanelCount) {
+            players[i]?.setRepeatMode(Player.REPEAT_MODE_ALL)
+        }
+        Toast.makeText(this, R.string.pinned_toast, Toast.LENGTH_SHORT).show()
+        revealOverlayUi()
+    }
+
+    /** Guarda los videos que estan en los paneles ahora mismo como un set con nombre. */
+    private fun saveCurrentAsSet() {
+        val uris = (0 until activePanelCount).mapNotNull { prefs.getString(uriKey(it), null) }
+        if (uris.size < MIN_PANELS) {
+            Toast.makeText(this, R.string.pool_too_few, Toast.LENGTH_SHORT).show()
+            return
+        }
+        val input = android.widget.EditText(this).apply {
+            hint = getString(R.string.new_set_name_hint)
+            val padding = (16 * resources.displayMetrics.density).toInt()
+            setPadding(padding, padding, padding, padding)
+        }
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.new_set_name_title)
+            .setView(input)
+            .setPositiveButton(R.string.save) { _, _ ->
+                val name = input.text.toString().trim()
+                    .ifEmpty { getString(R.string.default_set_name) }
+                val sets = VideoSetsStore.load(this)
+                sets.add(VideoSet(System.currentTimeMillis(), name, uris))
+                VideoSetsStore.save(this, sets)
+                Toast.makeText(
+                    this,
+                    getString(R.string.set_saved_toast, name),
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
     }
 
     // ----- Velocidad / distribucion / auto-rotacion / bloqueo -----
