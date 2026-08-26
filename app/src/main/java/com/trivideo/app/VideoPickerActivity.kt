@@ -27,6 +27,7 @@ class VideoPickerActivity : AppCompatActivity() {
 
     private var maxSelection = 4
     private var minSelection = 2
+    private var folderMode = false
     private val selectedPaths = LinkedHashSet<String>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -37,6 +38,10 @@ class VideoPickerActivity : AppCompatActivity() {
         prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
         maxSelection = intent.getIntExtra(EXTRA_MAX_SELECTION, 4)
         minSelection = intent.getIntExtra(EXTRA_MIN_SELECTION, 2)
+        folderMode = intent.getBooleanExtra(EXTRA_FOLDER_MODE, false)
+        if (folderMode) {
+            binding.btnDone.text = getString(R.string.picker_use_folder)
+        }
 
         val lastPath = prefs.getString(LAST_FOLDER_KEY, null)
         currentDir = lastPath?.let { File(it) }?.takeIf { it.isDirectory } ?: rootDir
@@ -102,6 +107,7 @@ class VideoPickerActivity : AppCompatActivity() {
     private fun isVideoFile(file: File): Boolean = file.extension.lowercase() in VIDEO_EXTENSIONS
 
     private fun toggleSelection(file: File) {
+        if (folderMode) return
         val path = file.absolutePath
         if (selectedPaths.contains(path)) {
             selectedPaths.remove(path)
@@ -121,13 +127,22 @@ class VideoPickerActivity : AppCompatActivity() {
     }
 
     private fun updateSelectionUi() {
+        if (folderMode) {
+            binding.tvSelectedCount.text = getString(R.string.picker_folder_mode_hint)
+            binding.btnDone.isEnabled = true
+            return
+        }
         binding.tvSelectedCount.text =
             getString(R.string.picker_selected_count, selectedPaths.size, maxSelection)
         binding.btnDone.isEnabled = selectedPaths.size >= minSelection
     }
 
     private fun finishWithSelection() {
-        val result = Intent().putStringArrayListExtra(EXTRA_SELECTED_PATHS, ArrayList(selectedPaths))
+        val result = if (folderMode) {
+            Intent().putExtra(EXTRA_SELECTED_FOLDER, currentDir.absolutePath)
+        } else {
+            Intent().putStringArrayListExtra(EXTRA_SELECTED_PATHS, ArrayList(selectedPaths))
+        }
         setResult(RESULT_OK, result)
         finish()
     }
@@ -217,6 +232,8 @@ class VideoPickerActivity : AppCompatActivity() {
         const val EXTRA_MAX_SELECTION = "max_selection"
         const val EXTRA_MIN_SELECTION = "min_selection"
         const val EXTRA_SELECTED_PATHS = "selected_paths"
+        const val EXTRA_FOLDER_MODE = "folder_mode"
+        const val EXTRA_SELECTED_FOLDER = "selected_folder"
 
         private const val PREFS_NAME = "trivideo_prefs"
         private const val LAST_FOLDER_KEY = "last_folder_path"

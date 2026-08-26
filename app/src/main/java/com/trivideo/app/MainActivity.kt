@@ -16,6 +16,7 @@ import android.os.Bundle
 import android.os.Environment
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.provider.OpenableColumns
 import android.provider.Settings
 import android.view.DragEvent
@@ -37,6 +38,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
+import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.common.VideoSize
 import androidx.media3.exoplayer.DefaultLoadControl
@@ -70,8 +72,35 @@ class MainActivity : AppCompatActivity() {
     private var volumeLevel: Int = 100
     private var draggingView: View? = null
 
+    private var appMode: String = MODE_FIXED
+    private var poolFolder: String? = null
+    private var poolClips: List<String> = emptyList()
+    private var speedIndex: Int = DEFAULT_SPEED_INDEX
+    private var layoutMode: Int = LAYOUT_AUTO
+    private var autoRotateEnabled: Boolean = false
+    private var autoRotateIntervalSec: Int = DEFAULT_ROTATE_INTERVAL
+    private var isLocked: Boolean = false
+    private var sessionStartMs: Long = 0L
+    private var sessionRunning: Boolean = false
+
     private val uiHandler = Handler(Looper.getMainLooper())
     private val hideOverlayRunnable = Runnable { hideOverlayUi() }
+
+    private val autoRotateRunnable = object : Runnable {
+        override fun run() {
+            if (autoRotateEnabled && appMode == MODE_POOL && activePanelCount > 0) {
+                swapPanelToRandomClip((0 until activePanelCount).random())
+            }
+            uiHandler.postDelayed(this, autoRotateIntervalSec * 1000L)
+        }
+    }
+
+    private val timerRunnable = object : Runnable {
+        override fun run() {
+            updateTimerText()
+            uiHandler.postDelayed(this, 1000L)
+        }
+    }
 
     private var pendingDownloadId: Long = -1
 
@@ -86,6 +115,17 @@ class MainActivity : AppCompatActivity() {
 
     private val videoPickerLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            val folder = if (result.resultCode == RESULT_OK) {
+                result.data?.getStringExtra(VideoPickerActivity.EXTRA_SELECTED_FOLDER)
+            } else {
+                null
+            }
+            if (folder != null) {
+                replaceTargetIndex = -1
+                enterPoolMode(folder)
+                return@registerForActivityResult
+            }
+
             val paths = if (result.resultCode == RESULT_OK) {
                 result.data?.getStringArrayListExtra(VideoPickerActivity.EXTRA_SELECTED_PATHS)
             } else {
@@ -122,13 +162,24 @@ class MainActivity : AppCompatActivity() {
         panels = List(MAX_PANELS) { PanelCellBinding.inflate(layoutInflater) }
         prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
         volumeLevel = prefs.getInt(VOLUME_KEY, 100)
+        appMode = prefs.getString(MODE_KEY, MODE_FIXED) ?: MODE_FIXED
+        poolFolder = prefs.getString(POOL_FOLDER_KEY, null)
+        speedIndex = prefs.getInt(SPEED_INDEX_KEY, DEFAULT_SPEED_INDEX)
+            .coerceIn(0, SPEED_VALUES.size - 1)
+        layoutMode = prefs.getInt(LAYOUT_MODE_KEY, LAYOUT_AUTO).coerceIn(LAYOUT_AUTO, LAYOUT_GRID_2X2)
+        autoRotateEnabled = prefs.getBoolean(AUTO_ROTATE_KEY, false)
+        autoRotateIntervalSec = prefs.getInt(AUTO_ROTATE_INTERVAL_KEY, DEFAULT_ROTATE_INTERVAL)
 
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         setupImmersiveMode()
         setupPanels()
         setupEmptyState()
         setupControlBar()
+        setupLockOverlay()
         setupUpdateBanner()
+        updateSpeedLabel()
+        updateLayoutLabel()
+        updateAutoRotateLabel()
 
         ContextCompat.registerReceiver(
             this,
@@ -166,6 +217,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun setupEmptyState() {
         binding.emptyState.btnPickVideos.setOnClickListener { launchPickerForAll() }
+        binding.emptyState.btnRandomFolder.setOnClickListener { launchFolderPicker() }
     }
 
     private fun setupControlBar() {
@@ -173,7 +225,35 @@ class MainActivity : AppCompatActivity() {
         binding.controlBar.btnSets.setOnClickListener {
             videoSetsLauncher.launch(Intent(this, VideoSetsActivity::class.java))
         }
+        binding.controlBar.btnRandom.setOnClickListener { launchFolderPicker() }
         binding.controlBar.btnPlayPause.setOnClickListener { toggleMasterPlayPause() }
+        binding.controlBar.btnMuteAll.setOnClickListener {
+            activeIndex = -1
+            applyVolumes()
+            updatePanelHighlights()
+            revealOverlayUi()
+        }
+        binding.controlBar.btnSpeed.setOnClickListener {
+            speedIndex = (speedIndex + 1) % SPEED_VALUES.size
+            prefs.edit().putInt(SPEED_INDEX_KEY, speedIndex).apply()
+            applySpeed()
+            updateSpeedLabel()
+            revealOverlayUi()
+        }
+        binding.controlBar.btnLayout.setOnClickListener {
+            cycleLayoutMode()
+            revealOverlayUi()
+        }
+        binding.controlBar.btnAutoRotate.setOnClickListener {
+            toggleAutoRotate()
+            revealOverlayUi()
+        }
+        binding.controlBar.btnAutoRotate.setOnLongClickListener {
+            cycleAutoRotateInterval()
+            revealOverlayUi()
+            true
+        }
+        binding.controlBar.btnLock.setOnClickListener { setLocked(true) }
 
         binding.controlBar.volumeSeekBar.progress = volumeLevel
         binding.controlBar.volumeSeekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
@@ -203,7 +283,12 @@ class MainActivity : AppCompatActivity() {
                 override fun onDown(e: MotionEvent): Boolean = true
 
                 override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
-                    onPanelSingleTap(index)
+                    if (appMode == MODE_POOL) {
+                        swapPanelToRandomClip(index)
+                        revealOverlayUi()
+                    } else {
+                        onPanelSingleTap(index)
+                    }
                     return true
                 }
 
@@ -222,7 +307,11 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 override fun onLongPress(e: MotionEvent) {
-                    startPanelDrag(index)
+                    if (appMode == MODE_POOL) {
+                        onPanelSingleTap(index)
+                    } else {
+                        startPanelDrag(index)
+                    }
                 }
             })
             panel.playerView.setOnTouchListener { _, event ->
@@ -410,7 +499,11 @@ class MainActivity : AppCompatActivity() {
     private fun applyVideoSelection(uris: List<Uri>) {
         if (uris.size < MIN_PANELS) return
 
+        appMode = MODE_FIXED
+        uiHandler.removeCallbacks(autoRotateRunnable)
+
         val editor = prefs.edit()
+        editor.putString(MODE_KEY, MODE_FIXED)
         editor.putInt(PANEL_COUNT_KEY, uris.size)
         for (i in 0 until MAX_PANELS) {
             editor.remove(positionKey(i))
@@ -507,13 +600,37 @@ class MainActivity : AppCompatActivity() {
 
     private fun showPlayersUi() {
         binding.emptyState.root.visibility = View.GONE
+        startSessionTimer()
         revealOverlayUi()
     }
 
     private fun showEmptyStateUi() {
         uiHandler.removeCallbacks(hideOverlayRunnable)
+        sessionRunning = false
         binding.emptyState.root.visibility = View.VISIBLE
         binding.controlBar.root.visibility = View.GONE
+    }
+
+    private fun startSessionTimer() {
+        uiHandler.removeCallbacks(timerRunnable)
+        if (!sessionRunning) {
+            sessionStartMs = SystemClock.elapsedRealtime()
+            sessionRunning = true
+        }
+        uiHandler.post(timerRunnable)
+    }
+
+    private fun updateTimerText() {
+        if (!sessionRunning) return
+        val elapsed = (SystemClock.elapsedRealtime() - sessionStartMs) / 1000L
+        val h = elapsed / 3600L
+        val m = (elapsed % 3600L) / 60L
+        val s = elapsed % 60L
+        binding.controlBar.tvTimer.text = if (h > 0L) {
+            String.format("%d:%02d:%02d", h, m, s)
+        } else {
+            String.format("%02d:%02d", m, s)
+        }
     }
 
     private fun buildPlayer(): ExoPlayer? {
@@ -536,9 +653,11 @@ class MainActivity : AppCompatActivity() {
         for (i in 0 until activePanelCount) {
             val panel = panels[i]
             val player = buildPlayer()?.apply {
-                repeatMode = Player.REPEAT_MODE_ALL
+                repeatMode =
+                    if (appMode == MODE_POOL) Player.REPEAT_MODE_OFF else Player.REPEAT_MODE_ALL
                 volume = 0f
                 playWhenReady = isPlaying
+                setPlaybackParameters(PlaybackParameters(SPEED_VALUES[speedIndex]))
             }
             if (player == null) {
                 panel.labelFilename.text = getString(R.string.video_load_error)
@@ -548,6 +667,9 @@ class MainActivity : AppCompatActivity() {
                 override fun onPlaybackStateChanged(playbackState: Int) {
                     panel.progressBar.visibility =
                         if (playbackState == Player.STATE_BUFFERING) View.VISIBLE else View.GONE
+                    if (playbackState == Player.STATE_ENDED && appMode == MODE_POOL) {
+                        swapPanelToRandomClip(i)
+                    }
                 }
 
                 override fun onVideoSizeChanged(videoSize: VideoSize) {
@@ -631,9 +753,18 @@ class MainActivity : AppCompatActivity() {
             root.post { maybeRebuildGrid() }
             return
         }
-        val targetAspect = computeTargetAspect()
-        val isPortraitDevice = root.height >= root.width
-        val shape = pickBestGridShape(activePanelCount, root.width, root.height, targetAspect, isPortraitDevice)
+        val shape = when (layoutMode) {
+            LAYOUT_ONE_COL -> activePanelCount to 1
+            LAYOUT_ONE_ROW -> 1 to activePanelCount
+            LAYOUT_GRID_2X2 -> if (activePanelCount >= 3) 2 to 2 else 1 to activePanelCount
+            else -> {
+                val targetAspect = computeTargetAspect()
+                val isPortraitDevice = root.height >= root.width
+                pickBestGridShape(
+                    activePanelCount, root.width, root.height, targetAspect, isPortraitDevice
+                )
+            }
+        }
         if (shape == currentGridShape) return
         currentGridShape = shape
         rebuildGridViews(shape.first, shape.second)
@@ -677,9 +808,29 @@ class MainActivity : AppCompatActivity() {
         if (hasAnyVideo(savedUris)) {
             showPlayersUi()
             loadUrisIntoPlayers(savedUris)
+            if (appMode == MODE_POOL) {
+                restorePoolIfNeeded()
+                if (autoRotateEnabled) {
+                    uiHandler.postDelayed(autoRotateRunnable, autoRotateIntervalSec * 1000L)
+                }
+            }
         } else {
             showEmptyStateUi()
         }
+    }
+
+    private fun restorePoolIfNeeded() {
+        if (poolClips.isNotEmpty()) return
+        val folder = poolFolder ?: return
+        val cached = MediaPool.cachedFor(folder)
+        if (cached.isNotEmpty()) {
+            poolClips = cached
+            return
+        }
+        Thread {
+            val clips = MediaPool.scan(folder)
+            runOnUiThread { poolClips = clips }
+        }.start()
     }
 
     override fun onStop() {
@@ -782,6 +933,203 @@ class MainActivity : AppCompatActivity() {
         startActivity(installIntent)
     }
 
+    // ----- Modo aleatorio (pool) -----
+
+    private fun launchFolderPicker() {
+        if (!hasStorageAccess()) {
+            requestStorageAccess()
+            return
+        }
+        replaceTargetIndex = -1
+        videoPickerLauncher.launch(
+            Intent(this, VideoPickerActivity::class.java)
+                .putExtra(VideoPickerActivity.EXTRA_FOLDER_MODE, true)
+        )
+    }
+
+    private fun enterPoolMode(folder: String) {
+        appMode = MODE_POOL
+        poolFolder = folder
+        prefs.edit()
+            .putString(MODE_KEY, MODE_POOL)
+            .putString(POOL_FOLDER_KEY, folder)
+            .apply()
+        Toast.makeText(this, R.string.scanning_folder, Toast.LENGTH_SHORT).show()
+        Thread {
+            val clips = MediaPool.scan(folder)
+            runOnUiThread {
+                poolClips = clips
+                if (clips.size < MIN_PANELS) {
+                    Toast.makeText(this, R.string.pool_too_few, Toast.LENGTH_LONG).show()
+                    return@runOnUiThread
+                }
+                Toast.makeText(
+                    this,
+                    getString(R.string.pool_found_toast, clips.size),
+                    Toast.LENGTH_SHORT
+                ).show()
+                startPoolPlayback()
+            }
+        }.start()
+    }
+
+    private fun startPoolPlayback() {
+        val count = poolClips.size.coerceIn(MIN_PANELS, MAX_PANELS)
+        val picks = poolClips.shuffled().take(count)
+
+        val editor = prefs.edit()
+        editor.putInt(PANEL_COUNT_KEY, count)
+        for (i in 0 until MAX_PANELS) {
+            editor.remove(positionKey(i))
+            if (i < picks.size) {
+                editor.putString(uriKey(i), Uri.fromFile(File(picks[i])).toString())
+            } else {
+                editor.remove(uriKey(i))
+            }
+        }
+        editor.apply()
+
+        activePanelCount = count
+        videoAspects = arrayOfNulls(MAX_PANELS)
+        currentGridShape = null
+        isPlaying = true
+        releasePlayers()
+        createPlayers()
+        maybeRebuildGrid()
+
+        showPlayersUi()
+        loadUrisIntoPlayers(getSavedUris())
+
+        uiHandler.removeCallbacks(autoRotateRunnable)
+        if (autoRotateEnabled) {
+            uiHandler.postDelayed(autoRotateRunnable, autoRotateIntervalSec * 1000L)
+        }
+    }
+
+    private fun currentlyShownPaths(): Set<String> =
+        (0 until activePanelCount)
+            .mapNotNull { prefs.getString(uriKey(it), null)?.let { u -> Uri.parse(u).path } }
+            .toSet()
+
+    private fun randomClipExcluding(exclude: Set<String>): String? {
+        if (poolClips.isEmpty()) return null
+        val available = poolClips.filterNot { it in exclude }
+        return (if (available.isNotEmpty()) available else poolClips).random()
+    }
+
+    private fun swapPanelToRandomClip(index: Int) {
+        if (appMode != MODE_POOL) return
+        if (index !in 0 until activePanelCount) return
+        val player = players[index] ?: return
+        val next = randomClipExcluding(currentlyShownPaths()) ?: return
+        val uri = Uri.fromFile(File(next))
+        prefs.edit()
+            .putString(uriKey(index), uri.toString())
+            .remove(positionKey(index))
+            .apply()
+        panels[index].labelFilename.text = queryDisplayName(uri)
+        panels[index].progressBar.visibility = View.VISIBLE
+        videoAspects[index] = null
+        player.setMediaItem(MediaItem.fromUri(uri))
+        player.prepare()
+        player.playWhenReady = isPlaying
+    }
+
+    // ----- Velocidad / distribucion / auto-rotacion / bloqueo -----
+
+    private fun applySpeed() {
+        val params = PlaybackParameters(SPEED_VALUES[speedIndex])
+        for (player in players) {
+            player?.setPlaybackParameters(params)
+        }
+    }
+
+    private fun updateSpeedLabel() {
+        val value = SPEED_VALUES[speedIndex]
+        val text = if (value == value.toLong().toFloat()) {
+            value.toLong().toString()
+        } else {
+            value.toString()
+        }
+        binding.controlBar.btnSpeed.text = getString(R.string.speed_label, text)
+    }
+
+    private fun cycleLayoutMode() {
+        var next = (layoutMode + 1) % 4
+        if (next == LAYOUT_GRID_2X2 && activePanelCount < 3) {
+            next = LAYOUT_AUTO
+        }
+        layoutMode = next
+        prefs.edit().putInt(LAYOUT_MODE_KEY, layoutMode).apply()
+        currentGridShape = null
+        maybeRebuildGrid()
+        updateLayoutLabel()
+    }
+
+    private fun updateLayoutLabel() {
+        val res = when (layoutMode) {
+            LAYOUT_ONE_COL -> R.string.layout_one_col
+            LAYOUT_ONE_ROW -> R.string.layout_one_row
+            LAYOUT_GRID_2X2 -> R.string.layout_grid
+            else -> R.string.layout_auto
+        }
+        binding.controlBar.btnLayout.text = getString(res)
+    }
+
+    private fun toggleAutoRotate() {
+        if (appMode != MODE_POOL) {
+            Toast.makeText(this, R.string.auto_rotate_only_pool, Toast.LENGTH_SHORT).show()
+            return
+        }
+        autoRotateEnabled = !autoRotateEnabled
+        prefs.edit().putBoolean(AUTO_ROTATE_KEY, autoRotateEnabled).apply()
+        uiHandler.removeCallbacks(autoRotateRunnable)
+        if (autoRotateEnabled) {
+            uiHandler.postDelayed(autoRotateRunnable, autoRotateIntervalSec * 1000L)
+        }
+        updateAutoRotateLabel()
+    }
+
+    private fun cycleAutoRotateInterval() {
+        val currentIdx = ROTATE_INTERVALS.indexOf(autoRotateIntervalSec).takeIf { it >= 0 } ?: 1
+        autoRotateIntervalSec = ROTATE_INTERVALS[(currentIdx + 1) % ROTATE_INTERVALS.size]
+        prefs.edit().putInt(AUTO_ROTATE_INTERVAL_KEY, autoRotateIntervalSec).apply()
+        Toast.makeText(
+            this,
+            getString(R.string.auto_rotate_interval_toast, autoRotateIntervalSec),
+            Toast.LENGTH_SHORT
+        ).show()
+        if (autoRotateEnabled) {
+            uiHandler.removeCallbacks(autoRotateRunnable)
+            uiHandler.postDelayed(autoRotateRunnable, autoRotateIntervalSec * 1000L)
+        }
+        updateAutoRotateLabel()
+    }
+
+    private fun updateAutoRotateLabel() {
+        binding.controlBar.btnAutoRotate.text = if (autoRotateEnabled) {
+            getString(R.string.auto_rotate_on, autoRotateIntervalSec)
+        } else {
+            getString(R.string.auto_rotate_off)
+        }
+    }
+
+    private fun setupLockOverlay() {
+        binding.lockOverlay.setOnClickListener { /* traga toques */ }
+        binding.btnUnlock.setOnClickListener { setLocked(false) }
+    }
+
+    private fun setLocked(locked: Boolean) {
+        isLocked = locked
+        binding.lockOverlay.visibility = if (locked) View.VISIBLE else View.GONE
+        if (locked) {
+            uiHandler.removeCallbacks(hideOverlayRunnable)
+            hideOverlayUi()
+        } else {
+            revealOverlayUi()
+        }
+    }
+
     companion object {
         private const val PREFS_NAME = "trivideo_prefs"
         private const val PANEL_COUNT_KEY = "panel_count"
@@ -794,5 +1142,25 @@ class MainActivity : AppCompatActivity() {
         private const val MAX_PANELS = 4
         private const val DEFAULT_PANEL_COUNT = 3
         private const val REQUEST_STORAGE_PERMISSION = 1001
+
+        private const val MODE_KEY = "mode"
+        private const val MODE_FIXED = "fixed"
+        private const val MODE_POOL = "pool"
+        private const val POOL_FOLDER_KEY = "pool_folder"
+        private const val SPEED_INDEX_KEY = "speed_index"
+        private const val LAYOUT_MODE_KEY = "layout_mode"
+        private const val AUTO_ROTATE_KEY = "auto_rotate"
+        private const val AUTO_ROTATE_INTERVAL_KEY = "auto_rotate_interval"
+
+        private val SPEED_VALUES = floatArrayOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f)
+        private const val DEFAULT_SPEED_INDEX = 2
+
+        private const val LAYOUT_AUTO = 0
+        private const val LAYOUT_ONE_COL = 1
+        private const val LAYOUT_ONE_ROW = 2
+        private const val LAYOUT_GRID_2X2 = 3
+
+        private val ROTATE_INTERVALS = intArrayOf(15, 30, 60, 120)
+        private const val DEFAULT_ROTATE_INTERVAL = 30
     }
 }

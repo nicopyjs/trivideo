@@ -35,6 +35,14 @@
             android:layout_height="wrap_content"
             android:text="@string/pick_videos" />
 
+        <Button
+            android:id="@+id/btnRandomFolder"
+            style="?android:attr/buttonStyleSmall"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/random_folder_button" />
+
     </LinearLayout>
 
 </FrameLayout>

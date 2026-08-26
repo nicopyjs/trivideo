@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">TriVideo</string>
-    <string name="empty_state_subtitle">Elige entre 2 y 4 videos para reproducirlos al mismo tiempo, uno en cada panel.\nToca dos veces un panel para cambiar su video, y mantenlo presionado y arrastra para reordenarlos.</string>
+    <string name="empty_state_subtitle">Elige entre 2 y 4 videos para reproducirlos al mismo tiempo, uno en cada panel.\nToca dos veces un panel para cambiar su video, y mantenlo presionado y arrastra para reordenarlos.\n\nO usa \"Carpeta al azar\" para que la app vaya poniendo videos random de una carpeta sin parar.</string>
     <string name="pick_videos">Elegir videos</string>
     <string name="change_videos">Cambiar videos</string>
     <string name="play_pause">Reproducir o pausar todos los videos</string>
@@ -43,4 +43,25 @@
     <string name="delete_set_message">¿Eliminar el set \"%1$s\"?</string>
     <string name="set_saved_toast">Set \"%1$s\" guardado</string>
     <string name="play_set_button">Reproducir este set</string>
+
+    <string name="random_folder_button">Carpeta al azar</string>
+    <string name="random_button_short">Aleatorio</string>
+    <string name="picker_use_folder">Usar esta carpeta</string>
+    <string name="picker_folder_mode_hint">Navega hasta la carpeta con tus videos y toca \"Usar esta carpeta\"</string>
+    <string name="scanning_folder">Buscando videos…</string>
+    <string name="pool_too_few">Esa carpeta tiene menos de 2 videos</string>
+    <string name="pool_found_toast">%1$d videos en el pool</string>
+    <string name="mute_all">Silenciar todo</string>
+    <string name="lock_controls">Bloquear controles</string>
+    <string name="unlock_controls">Desbloquear</string>
+    <string name="auto_rotate_only_pool">La auto-rotación solo funciona con \"Carpeta al azar\"</string>
+    <string name="auto_rotate_interval_toast">Auto-rotación cada %1$d s</string>
+    <string name="auto_rotate_off">Rotar: off</string>
+    <string name="auto_rotate_on">Rotar: %1$ds</string>
+    <string name="layout_auto">Auto</string>
+    <string name="layout_one_col">Columna</string>
+    <string name="layout_one_row">Fila</string>
+    <string name="layout_grid">2x2</string>
+    <string name="speed_label">%1$sx</string>
+    <string name="session_timer_initial">00:00</string>
 </resources>
