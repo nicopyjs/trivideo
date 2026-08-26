@@ -28,6 +28,13 @@
             android:layout_marginStart="16dp"
             android:text="@string/change_videos" />
 
+        <Button
+            android:id="@+id/btnSets"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:text="@string/sets_button" />
+
     </LinearLayout>
 
     <LinearLayout

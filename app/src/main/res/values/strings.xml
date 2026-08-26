@@ -26,4 +26,19 @@
     <string name="picker_max_reached_toast">Ya elegiste el máximo de %1$d videos</string>
     <string name="picker_empty_folder">Esta carpeta no tiene videos ni subcarpetas</string>
     <string name="picker_storage_root_label">Almacenamiento</string>
+
+    <string name="sets_button">Sets</string>
+    <string name="sets_dialog_title">Sets de videos</string>
+    <string name="save_current_set">Guardar set actual</string>
+    <string name="no_sets_yet">Aún no tienes sets guardados</string>
+    <string name="set_name_with_count">%1$s (%2$d videos)</string>
+    <string name="new_set_name_title">Nombre del set</string>
+    <string name="new_set_name_hint">Ej: Set 1</string>
+    <string name="default_set_name">Set sin nombre</string>
+    <string name="save">Guardar</string>
+    <string name="delete">Eliminar</string>
+    <string name="delete_set_title">Eliminar set</string>
+    <string name="delete_set_message">¿Eliminar el set \"%1$s\"?</string>
+    <string name="set_saved_toast">Set \"%1$s\" guardado</string>
+    <string name="set_needs_videos_toast">Elige videos antes de guardar un set</string>
 </resources>
