@@ -4,26 +4,28 @@
     android:layout_height="wrap_content"
     android:orientation="horizontal"
     android:gravity="center_vertical"
-    android:paddingTop="10dp"
-    android:paddingBottom="10dp"
+    android:paddingTop="6dp"
+    android:paddingBottom="6dp"
     android:paddingStart="4dp"
     android:paddingEnd="4dp">
 
-    <TextView
-        android:id="@+id/tvIndex"
-        android:layout_width="28dp"
-        android:layout_height="wrap_content"
-        android:textColor="#99FFFFFF"
-        android:textSize="14sp" />
+    <ImageView
+        android:id="@+id/ivThumbnail"
+        android:layout_width="88dp"
+        android:layout_height="64dp"
+        android:scaleType="centerCrop"
+        android:background="#33FFFFFF"
+        android:contentDescription="@null" />
 
     <TextView
         android:id="@+id/tvVideoName"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"
+        android:layout_marginStart="12dp"
         android:textColor="@android:color/white"
         android:textSize="15sp"
-        android:maxLines="1"
+        android:maxLines="2"
         android:ellipsize="middle" />
 
 </LinearLayout>

@@ -120,11 +120,26 @@ class VideoSetDetailActivity : AppCompatActivity() {
         }
 
         override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-            holder.binding.tvIndex.text = "${position + 1}."
-            holder.binding.tvVideoName.text = Uri.parse(uris[position]).lastPathSegment.orEmpty()
+            val parsed = Uri.parse(uris[position])
+            holder.binding.tvVideoName.text = parsed.lastPathSegment.orEmpty()
+            holder.binding.ivThumbnail.setImageBitmap(null)
+            val path = parsed.path
+            if (path != null) {
+                holder.bind(path)
+                VideoThumbnailLoader.load(path) { bitmap ->
+                    if (holder.boundPath == path) {
+                        holder.binding.ivThumbnail.setImageBitmap(bitmap)
+                    }
+                }
+            }
         }
 
-        class ViewHolder(val binding: ItemSetDetailVideoBinding) : RecyclerView.ViewHolder(binding.root)
+        class ViewHolder(val binding: ItemSetDetailVideoBinding) : RecyclerView.ViewHolder(binding.root) {
+            var boundPath: String? = null
+            fun bind(path: String) {
+                boundPath = path
+            }
+        }
     }
 
     companion object {
