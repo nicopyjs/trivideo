@@ -58,6 +58,10 @@
     <string name="auto_rotate_interval_toast">Auto-rotación cada %1$d s</string>
     <string name="auto_rotate_off">Rotar: off</string>
     <string name="auto_rotate_on">Rotar: %1$ds</string>
+    <string name="panel_held_badge">● RETENIDO</string>
+    <string name="panel_hold_on_toast">Panel retenido · los demás siguen rotando</string>
+    <string name="panel_hold_off_toast">Panel liberado, vuelve a rotar</string>
+    <string name="panel_held_tap_toast">Panel retenido · mantén presionado para soltarlo</string>
     <string name="pin_current">Fijar estos</string>
     <string name="pinned_toast">Listo: ahora estos videos se repiten en loop</string>
     <string name="save_current_set">Guardar set</string>

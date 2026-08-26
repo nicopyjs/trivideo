@@ -75,6 +75,7 @@ class MainActivity : AppCompatActivity() {
     private var appMode: String = MODE_FIXED
     private var poolFolder: String? = null
     private var poolClips: List<String> = emptyList()
+    private val heldPanels = BooleanArray(MAX_PANELS)
     private var speedIndex: Int = DEFAULT_SPEED_INDEX
     private var layoutMode: Int = LAYOUT_AUTO
     private var autoRotateEnabled: Boolean = false
@@ -89,7 +90,10 @@ class MainActivity : AppCompatActivity() {
     private val autoRotateRunnable = object : Runnable {
         override fun run() {
             if (autoRotateEnabled && appMode == MODE_POOL && activePanelCount > 0) {
-                swapPanelToRandomClip((0 until activePanelCount).random())
+                val candidates = (0 until activePanelCount).filterNot { heldPanels[it] }
+                if (candidates.isNotEmpty()) {
+                    swapPanelToRandomClip(candidates.random())
+                }
             }
             uiHandler.postDelayed(this, autoRotateIntervalSec * 1000L)
         }
@@ -286,7 +290,15 @@ class MainActivity : AppCompatActivity() {
 
                 override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
                     if (appMode == MODE_POOL) {
-                        swapPanelToRandomClip(index)
+                        if (index < activePanelCount && heldPanels[index]) {
+                            Toast.makeText(
+                                this@MainActivity,
+                                R.string.panel_held_tap_toast,
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        } else {
+                            swapPanelToRandomClip(index)
+                        }
                         revealOverlayUi()
                     } else {
                         onPanelSingleTap(index)
@@ -310,7 +322,7 @@ class MainActivity : AppCompatActivity() {
 
                 override fun onLongPress(e: MotionEvent) {
                     if (appMode == MODE_POOL) {
-                        onPanelSingleTap(index)
+                        toggleHold(index)
                     } else {
                         startPanelDrag(index)
                     }
@@ -522,6 +534,7 @@ class MainActivity : AppCompatActivity() {
 
         appMode = MODE_FIXED
         uiHandler.removeCallbacks(autoRotateRunnable)
+        clearHeld()
 
         val editor = prefs.edit()
         editor.putString(MODE_KEY, MODE_FIXED)
@@ -688,7 +701,9 @@ class MainActivity : AppCompatActivity() {
                 override fun onPlaybackStateChanged(playbackState: Int) {
                     panel.progressBar.visibility =
                         if (playbackState == Player.STATE_BUFFERING) View.VISIBLE else View.GONE
-                    if (playbackState == Player.STATE_ENDED && appMode == MODE_POOL) {
+                    if (playbackState == Player.STATE_ENDED && appMode == MODE_POOL &&
+                        !heldPanels[i]
+                    ) {
                         swapPanelToRandomClip(i)
                     }
                 }
@@ -831,6 +846,7 @@ class MainActivity : AppCompatActivity() {
             loadUrisIntoPlayers(savedUris)
             if (appMode == MODE_POOL) {
                 restorePoolIfNeeded()
+                applyHeldRepeatModes()
                 if (autoRotateEnabled) {
                     uiHandler.postDelayed(autoRotateRunnable, autoRotateIntervalSec * 1000L)
                 }
@@ -1014,6 +1030,7 @@ class MainActivity : AppCompatActivity() {
         videoAspects = arrayOfNulls(MAX_PANELS)
         currentGridShape = null
         isPlaying = true
+        clearHeld()
         releasePlayers()
         createPlayers()
         maybeRebuildGrid()
@@ -1041,6 +1058,7 @@ class MainActivity : AppCompatActivity() {
     private fun swapPanelToRandomClip(index: Int) {
         if (appMode != MODE_POOL) return
         if (index !in 0 until activePanelCount) return
+        if (heldPanels[index]) return
         val player = players[index] ?: return
         val next = randomClipExcluding(currentlyShownPaths()) ?: return
         val uri = Uri.fromFile(File(next))
@@ -1057,6 +1075,44 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
+     * Retener un panel: deja de rotar (auto-rotacion, fin de clip y toque simple lo
+     * ignoran) y se queda en loop con su clip actual, mientras los demas siguen
+     * buscando. Sirve para ir armando un set panel por panel.
+     */
+    private fun toggleHold(index: Int) {
+        if (appMode != MODE_POOL) return
+        if (index !in 0 until activePanelCount) return
+        val held = !heldPanels[index]
+        heldPanels[index] = held
+        panels[index].holdBadge.visibility = if (held) View.VISIBLE else View.GONE
+        players[index]?.setRepeatMode(
+            if (held) Player.REPEAT_MODE_ALL else Player.REPEAT_MODE_OFF
+        )
+        Toast.makeText(
+            this,
+            if (held) R.string.panel_hold_on_toast else R.string.panel_hold_off_toast,
+            Toast.LENGTH_SHORT
+        ).show()
+        revealOverlayUi()
+    }
+
+    private fun clearHeld() {
+        for (i in 0 until MAX_PANELS) {
+            heldPanels[i] = false
+            panels[i].holdBadge.visibility = View.GONE
+        }
+    }
+
+    private fun applyHeldRepeatModes() {
+        for (i in 0 until activePanelCount) {
+            if (heldPanels[i]) {
+                players[i]?.setRepeatMode(Player.REPEAT_MODE_ALL)
+                panels[i].holdBadge.visibility = View.VISIBLE
+            }
+        }
+    }
+
+    /**
      * "Fijar estos": deja de rotar y pasa los clips que estan sonando ahora a modo
      * repetitivo (loop). No abre el selector: usa lo que ya hay en cada panel.
      */
@@ -1064,6 +1120,7 @@ class MainActivity : AppCompatActivity() {
         if (appMode != MODE_POOL) return
         appMode = MODE_FIXED
         prefs.edit().putString(MODE_KEY, MODE_FIXED).apply()
+        clearHeld()
 
         uiHandler.removeCallbacks(autoRotateRunnable)
         if (autoRotateEnabled) {

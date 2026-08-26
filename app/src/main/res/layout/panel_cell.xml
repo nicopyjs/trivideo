@@ -35,6 +35,23 @@
         android:ellipsize="end"
         android:text="" />
 
+    <TextView
+        android:id="@+id/holdBadge"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|end"
+        android:layout_margin="8dp"
+        android:background="@drawable/label_background"
+        android:paddingStart="8dp"
+        android:paddingEnd="8dp"
+        android:paddingTop="2dp"
+        android:paddingBottom="2dp"
+        android:textColor="@android:color/white"
+        android:textStyle="bold"
+        android:textSize="11sp"
+        android:text="@string/panel_held_badge"
+        android:visibility="gone" />
+
     <View
         android:id="@+id/activeBorder"
         android:layout_width="match_parent"
