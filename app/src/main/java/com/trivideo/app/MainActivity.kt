@@ -42,14 +42,9 @@ import androidx.media3.common.VideoSize
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
-import androidx.recyclerview.widget.LinearLayoutManager
-import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.trivideo.app.databinding.ActivityMainBinding
-import com.trivideo.app.databinding.DialogVideoSetsBinding
-import com.trivideo.app.databinding.ItemVideoSetBinding
 import com.trivideo.app.databinding.PanelCellBinding
-import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.net.HttpURLConnection
@@ -105,6 +100,18 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             replaceTargetIndex = -1
+        }
+
+    private val videoSetsLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            if (result.resultCode == RESULT_OK) {
+                val uris = result.data
+                    ?.getStringArrayListExtra(VideoSetsActivity.EXTRA_SELECTED_SET_URIS)
+                    ?.map { Uri.parse(it) }
+                if (!uris.isNullOrEmpty()) {
+                    applyVideoSelection(uris)
+                }
+            }
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -163,7 +170,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun setupControlBar() {
         binding.controlBar.btnChangeVideos.setOnClickListener { launchPickerForAll() }
-        binding.controlBar.btnSets.setOnClickListener { openVideoSetsDialog() }
+        binding.controlBar.btnSets.setOnClickListener {
+            videoSetsLauncher.launch(Intent(this, VideoSetsActivity::class.java))
+        }
         binding.controlBar.btnPlayPause.setOnClickListener { toggleMasterPlayPause() }
 
         binding.controlBar.volumeSeekBar.progress = volumeLevel
@@ -439,139 +448,6 @@ class MainActivity : AppCompatActivity() {
         player.setMediaItem(MediaItem.fromUri(uri))
         player.prepare()
         player.playWhenReady = isPlaying
-    }
-
-    private data class VideoSet(val id: Long, val name: String, val uris: List<String>)
-
-    private fun loadVideoSets(): MutableList<VideoSet> {
-        val raw = prefs.getString(VIDEO_SETS_KEY, null) ?: return mutableListOf()
-        return try {
-            val array = JSONArray(raw)
-            MutableList(array.length()) { i ->
-                val obj = array.getJSONObject(i)
-                val urisArray = obj.getJSONArray("uris")
-                val uris = List(urisArray.length()) { j -> urisArray.getString(j) }
-                VideoSet(obj.getLong("id"), obj.getString("name"), uris)
-            }
-        } catch (_: Exception) {
-            mutableListOf()
-        }
-    }
-
-    private fun saveVideoSets(sets: List<VideoSet>) {
-        val array = JSONArray()
-        for (set in sets) {
-            val obj = JSONObject()
-            obj.put("id", set.id)
-            obj.put("name", set.name)
-            obj.put("uris", JSONArray(set.uris))
-            array.put(obj)
-        }
-        prefs.edit().putString(VIDEO_SETS_KEY, array.toString()).apply()
-    }
-
-    private fun openVideoSetsDialog() {
-        val dialogBinding = DialogVideoSetsBinding.inflate(layoutInflater)
-        var dialog: androidx.appcompat.app.AlertDialog? = null
-
-        val adapter = VideoSetsAdapter(
-            onSetClick = { set ->
-                loadVideoSet(set)
-                dialog?.dismiss()
-            },
-            onDeleteClick = { set -> confirmDeleteSet(set, dialogBinding) }
-        )
-        dialogBinding.recyclerViewSets.layoutManager = LinearLayoutManager(this)
-        dialogBinding.recyclerViewSets.adapter = adapter
-        refreshSetsList(dialogBinding, adapter)
-
-        dialogBinding.btnSaveCurrentSet.setOnClickListener {
-            promptSaveCurrentSet { refreshSetsList(dialogBinding, adapter) }
-        }
-
-        dialog = MaterialAlertDialogBuilder(this)
-            .setTitle(R.string.sets_dialog_title)
-            .setView(dialogBinding.root)
-            .setNegativeButton(R.string.cancel, null)
-            .show()
-    }
-
-    private fun refreshSetsList(dialogBinding: DialogVideoSetsBinding, adapter: VideoSetsAdapter) {
-        val sets = loadVideoSets()
-        adapter.submitList(sets)
-        dialogBinding.tvEmptySets.visibility = if (sets.isEmpty()) View.VISIBLE else View.GONE
-        dialogBinding.recyclerViewSets.visibility = if (sets.isEmpty()) View.GONE else View.VISIBLE
-    }
-
-    private fun confirmDeleteSet(set: VideoSet, dialogBinding: DialogVideoSetsBinding) {
-        val adapter = dialogBinding.recyclerViewSets.adapter as VideoSetsAdapter
-        MaterialAlertDialogBuilder(this)
-            .setTitle(R.string.delete_set_title)
-            .setMessage(getString(R.string.delete_set_message, set.name))
-            .setPositiveButton(R.string.delete) { _, _ ->
-                saveVideoSets(loadVideoSets().filterNot { it.id == set.id })
-                refreshSetsList(dialogBinding, adapter)
-            }
-            .setNegativeButton(R.string.cancel, null)
-            .show()
-    }
-
-    private fun promptSaveCurrentSet(onSaved: () -> Unit) {
-        val currentUris = (0 until activePanelCount).mapNotNull { prefs.getString(uriKey(it), null) }
-        if (currentUris.size < MIN_PANELS) {
-            Toast.makeText(this, R.string.set_needs_videos_toast, Toast.LENGTH_SHORT).show()
-            return
-        }
-        val input = android.widget.EditText(this).apply {
-            hint = getString(R.string.new_set_name_hint)
-            val padding = (16 * resources.displayMetrics.density).toInt()
-            setPadding(padding, padding, padding, padding)
-        }
-        MaterialAlertDialogBuilder(this)
-            .setTitle(R.string.new_set_name_title)
-            .setView(input)
-            .setPositiveButton(R.string.save) { _, _ ->
-                val name = input.text.toString().trim().ifEmpty { getString(R.string.default_set_name) }
-                val sets = loadVideoSets()
-                sets.add(VideoSet(System.currentTimeMillis(), name, currentUris))
-                saveVideoSets(sets)
-                Toast.makeText(this, getString(R.string.set_saved_toast, name), Toast.LENGTH_SHORT).show()
-                onSaved()
-            }
-            .setNegativeButton(R.string.cancel, null)
-            .show()
-    }
-
-    private fun loadVideoSet(set: VideoSet) {
-        applyVideoSelection(set.uris.map { Uri.parse(it) })
-    }
-
-    private inner class VideoSetsAdapter(
-        private val onSetClick: (VideoSet) -> Unit,
-        private val onDeleteClick: (VideoSet) -> Unit
-    ) : RecyclerView.Adapter<VideoSetsAdapter.ViewHolder>() {
-
-        private var items: List<VideoSet> = emptyList()
-
-        fun submitList(newItems: List<VideoSet>) {
-            items = newItems
-            notifyDataSetChanged()
-        }
-
-        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder =
-            ViewHolder(ItemVideoSetBinding.inflate(layoutInflater, parent, false))
-
-        override fun getItemCount(): Int = items.size
-
-        override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-            val set = items[position]
-            holder.binding.tvSetName.text =
-                getString(R.string.set_name_with_count, set.name, set.uris.size)
-            holder.binding.root.setOnClickListener { onSetClick(set) }
-            holder.binding.btnDeleteSet.setOnClickListener { onDeleteClick(set) }
-        }
-
-        inner class ViewHolder(val binding: ItemVideoSetBinding) : RecyclerView.ViewHolder(binding.root)
     }
 
     private fun uriKey(index: Int) = "uri_$index"
@@ -909,7 +785,6 @@ class MainActivity : AppCompatActivity() {
     companion object {
         private const val PREFS_NAME = "trivideo_prefs"
         private const val PANEL_COUNT_KEY = "panel_count"
-        private const val VIDEO_SETS_KEY = "video_sets"
         private const val VOLUME_KEY = "volume_level"
         private const val AUTO_HIDE_DELAY_MS = 2000L
         private const val GITHUB_OWNER = "nicopyjs"

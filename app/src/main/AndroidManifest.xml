@@ -35,6 +35,11 @@
             android:exported="false"
             android:theme="@style/Theme.TriVideo" />
 
+        <activity
+            android:name=".VideoSetsActivity"
+            android:exported="false"
+            android:theme="@style/Theme.TriVideo" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

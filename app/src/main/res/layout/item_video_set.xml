@@ -5,19 +5,28 @@
     android:orientation="horizontal"
     android:gravity="center_vertical"
     android:background="?android:attr/selectableItemBackground"
-    android:paddingTop="12dp"
-    android:paddingBottom="12dp"
-    android:paddingStart="8dp"
-    android:paddingEnd="8dp">
+    android:paddingTop="8dp"
+    android:paddingBottom="8dp"
+    android:paddingStart="12dp"
+    android:paddingEnd="4dp">
 
     <TextView
         android:id="@+id/tvSetName"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"
+        android:textColor="@android:color/white"
         android:textSize="16sp"
         android:maxLines="1"
         android:ellipsize="end" />
+
+    <ImageButton
+        android:id="@+id/btnRenameSet"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:background="?android:attr/selectableItemBackgroundBorderless"
+        android:src="@android:drawable/ic_menu_edit"
+        android:contentDescription="@string/rename" />
 
     <ImageButton
         android:id="@+id/btnDeleteSet"
