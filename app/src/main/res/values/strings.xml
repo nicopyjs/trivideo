@@ -50,7 +50,7 @@
     <string name="picker_folder_mode_hint">Navega hasta la carpeta con tus videos y toca \"Usar esta carpeta\"</string>
     <string name="scanning_folder">Buscando videos…</string>
     <string name="pool_too_few">Esa carpeta tiene menos de 2 videos</string>
-    <string name="pool_found_toast">%1$d videos en el pool</string>
+    <string name="pool_found_toast">%1$d videos · toca un panel para cambiarlo, desliza hacia arriba para los controles</string>
     <string name="mute_all">Silenciar todo</string>
     <string name="lock_controls">Bloquear controles</string>
     <string name="unlock_controls">Desbloquear</string>

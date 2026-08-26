@@ -315,6 +315,23 @@ class MainActivity : AppCompatActivity() {
                         startPanelDrag(index)
                     }
                 }
+
+                override fun onFling(
+                    e1: MotionEvent?,
+                    e2: MotionEvent,
+                    velocityX: Float,
+                    velocityY: Float
+                ): Boolean {
+                    val dy = e2.y - (e1?.y ?: e2.y)
+                    if (abs(dy) > abs(e2.x - (e1?.x ?: e2.x)) &&
+                        abs(dy) > SWIPE_MIN_DISTANCE_PX
+                    ) {
+                        // Deslizar arriba/abajo solo muestra u oculta la barra, sin cambiar nada.
+                        if (dy < 0) revealOverlayUi() else hideOverlayUi()
+                        return true
+                    }
+                    return false
+                }
             })
             panel.playerView.setOnTouchListener { _, event ->
                 detector.onTouchEvent(event)
@@ -1191,7 +1208,8 @@ class MainActivity : AppCompatActivity() {
         private const val PREFS_NAME = "trivideo_prefs"
         private const val PANEL_COUNT_KEY = "panel_count"
         private const val VOLUME_KEY = "volume_level"
-        private const val AUTO_HIDE_DELAY_MS = 2000L
+        private const val AUTO_HIDE_DELAY_MS = 7000L
+        private const val SWIPE_MIN_DISTANCE_PX = 90f
         private const val GITHUB_OWNER = "nicopyjs"
         private const val GITHUB_REPO = "trivideo"
         private const val UPDATE_APK_FILENAME = "update.apk"
