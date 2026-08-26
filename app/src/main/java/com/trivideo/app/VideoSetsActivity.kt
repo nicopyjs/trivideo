@@ -32,6 +32,18 @@ class VideoSetsActivity : AppCompatActivity() {
             }
         }
 
+    private val setDetailLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            if (result.resultCode == RESULT_OK) {
+                // El detalle del set decidio reproducirlo: pasamos el resultado hacia arriba
+                // (MainActivity) en vez de solo volver a la lista.
+                setResult(RESULT_OK, result.data)
+                finish()
+            } else {
+                refreshList()
+            }
+        }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityVideoSetsBinding.inflate(layoutInflater)
@@ -47,7 +59,7 @@ class VideoSetsActivity : AppCompatActivity() {
         }
 
         adapter = SetsAdapter(
-            onUseClick = { set -> useSet(set) },
+            onOpenClick = { set -> openSetDetail(set) },
             onRenameClick = { set -> promptRenameSet(set) },
             onDeleteClick = { set -> confirmDeleteSet(set) }
         )
@@ -64,10 +76,11 @@ class VideoSetsActivity : AppCompatActivity() {
         binding.recyclerViewSets.visibility = if (sets.isEmpty()) View.GONE else View.VISIBLE
     }
 
-    private fun useSet(set: VideoSet) {
-        val result = Intent().putStringArrayListExtra(EXTRA_SELECTED_SET_URIS, ArrayList(set.uris))
-        setResult(RESULT_OK, result)
-        finish()
+    private fun openSetDetail(set: VideoSet) {
+        setDetailLauncher.launch(
+            Intent(this, VideoSetDetailActivity::class.java)
+                .putExtra(VideoSetDetailActivity.EXTRA_SET_ID, set.id)
+        )
     }
 
     private fun promptNewSetName(uris: List<String>) {
@@ -131,7 +144,7 @@ class VideoSetsActivity : AppCompatActivity() {
     }
 
     private class SetsAdapter(
-        private val onUseClick: (VideoSet) -> Unit,
+        private val onOpenClick: (VideoSet) -> Unit,
         private val onRenameClick: (VideoSet) -> Unit,
         private val onDeleteClick: (VideoSet) -> Unit
     ) : RecyclerView.Adapter<SetsAdapter.ViewHolder>() {
@@ -154,7 +167,7 @@ class VideoSetsActivity : AppCompatActivity() {
             val set = items[position]
             holder.binding.tvSetName.text =
                 holder.binding.root.context.getString(R.string.set_name_with_count, set.name, set.uris.size)
-            holder.binding.root.setOnClickListener { onUseClick(set) }
+            holder.binding.root.setOnClickListener { onOpenClick(set) }
             holder.binding.btnRenameSet.setOnClickListener { onRenameClick(set) }
             holder.binding.btnDeleteSet.setOnClickListener { onDeleteClick(set) }
         }

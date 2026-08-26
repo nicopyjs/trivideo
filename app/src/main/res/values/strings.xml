@@ -42,4 +42,5 @@
     <string name="delete_set_title">Eliminar set</string>
     <string name="delete_set_message">¿Eliminar el set \"%1$s\"?</string>
     <string name="set_saved_toast">Set \"%1$s\" guardado</string>
+    <string name="play_set_button">Reproducir este set</string>
 </resources>
