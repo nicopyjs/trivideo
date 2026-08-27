@@ -21,10 +21,12 @@ import android.provider.OpenableColumns
 import android.provider.Settings
 import android.view.DragEvent
 import android.view.GestureDetector
+import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
+import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.SeekBar
 import android.widget.Toast
@@ -88,6 +90,14 @@ class MainActivity : AppCompatActivity() {
 
     private val uiHandler = Handler(Looper.getMainLooper())
     private val hideOverlayRunnable = Runnable { hideOverlayUi() }
+    private val hideLabelsRunnable = Runnable {
+        if (binding.controlBar.root.visibility != View.VISIBLE) {
+            for (i in 0 until activePanelCount) {
+                panels[i].labelFilename.visibility = View.GONE
+                panels[i].activeBorder.visibility = View.GONE
+            }
+        }
+    }
 
     private val autoRotateRunnable = object : Runnable {
         override fun run() {
@@ -185,6 +195,7 @@ class MainActivity : AppCompatActivity() {
         setupGestureHint()
         setupUpdateBanner()
         applyPanelInsets()
+        applyPanelOrientation()
         syncControls()
 
         ContextCompat.registerReceiver(
@@ -217,6 +228,7 @@ class MainActivity : AppCompatActivity() {
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
         setupImmersiveMode()
+        applyPanelOrientation()
         // El tamano de playersRoot recien queda actualizado despues del proximo layout pass.
         binding.playersRoot.post { maybeRebuildGrid() }
     }
@@ -457,7 +469,7 @@ class MainActivity : AppCompatActivity() {
                         } else {
                             swapPanelToRandomClip(index)
                         }
-                        revealOverlayUi()
+                        flashPanelFeedback()
                     } else {
                         onPanelSingleTap(index)
                     }
@@ -494,7 +506,7 @@ class MainActivity : AppCompatActivity() {
                 ): Boolean {
                     val dy = e2.y - (e1?.y ?: e2.y)
                     if (abs(dy) > abs(e2.x - (e1?.x ?: e2.x)) &&
-                        abs(dy) > SWIPE_MIN_DISTANCE_PX
+                        abs(dy) > dp(56f)
                     ) {
                         // Deslizar arriba/abajo solo muestra u oculta la barra, sin cambiar nada.
                         if (dy < 0) revealOverlayUi() else hideOverlayUi()
@@ -587,7 +599,7 @@ class MainActivity : AppCompatActivity() {
     private fun onPanelSingleTap(index: Int) {
         activeIndex = if (activeIndex == index) -1 else index
         applyVolumes()
-        revealOverlayUi()
+        flashPanelFeedback()
     }
 
     private fun applyVolumes() {
@@ -616,16 +628,21 @@ class MainActivity : AppCompatActivity() {
 
     private fun revealOverlayUi() {
         uiHandler.removeCallbacks(hideOverlayRunnable)
+        uiHandler.removeCallbacks(hideLabelsRunnable)
         val panel = binding.controlBar.root
         val wasHidden = panel.visibility != View.VISIBLE
         panel.visibility = View.VISIBLE
         syncControls()
         if (wasHidden && animationsEnabled()) {
+            val landscape =
+                resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
             panel.alpha = 0f
-            panel.translationY = dp(20f).toFloat()
-            panel.animate().alpha(1f).translationY(0f).setDuration(200L).start()
+            panel.translationX = if (landscape) dp(28f).toFloat() else 0f
+            panel.translationY = if (landscape) 0f else dp(20f).toFloat()
+            panel.animate().alpha(1f).translationX(0f).translationY(0f).setDuration(200L).start()
         } else {
             panel.alpha = 1f
+            panel.translationX = 0f
             panel.translationY = 0f
         }
         for (i in 0 until activePanelCount) {
@@ -638,9 +655,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun hideOverlayUi() {
+        uiHandler.removeCallbacks(hideLabelsRunnable)
         val panel = binding.controlBar.root
         panel.animate().cancel()
         panel.alpha = 1f
+        panel.translationX = 0f
         panel.translationY = 0f
         panel.visibility = View.GONE
         for (i in 0 until activePanelCount) {
@@ -655,6 +674,42 @@ class MainActivity : AppCompatActivity() {
         ) != 0f
     } catch (_: Exception) {
         true
+    }
+
+    /**
+     * Feedback liviano al tocar un panel (cambiar clip, retener, elegir audio): muestra
+     * los nombres y el borde activo unos segundos, sin abrir el panel de controles.
+     * El panel de controles solo aparece con el gesto de deslizar hacia arriba.
+     */
+    private fun flashPanelFeedback() {
+        uiHandler.removeCallbacks(hideLabelsRunnable)
+        for (i in 0 until activePanelCount) {
+            panels[i].labelFilename.visibility = View.VISIBLE
+        }
+        updatePanelHighlights()
+        if (binding.controlBar.root.visibility != View.VISIBLE) {
+            uiHandler.postDelayed(hideLabelsRunnable, LABEL_FLASH_MS)
+        }
+    }
+
+    private fun applyPanelOrientation() {
+        val panel = binding.controlBar.root
+        val lp = panel.layoutParams as? FrameLayout.LayoutParams ?: return
+        val landscape =
+            resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+        if (landscape) {
+            lp.width = minOf(dp(400f), (resources.displayMetrics.widthPixels * 0.52f).toInt())
+            lp.height = FrameLayout.LayoutParams.MATCH_PARENT
+            lp.gravity = Gravity.END or Gravity.BOTTOM
+            val m = dp(8f)
+            lp.setMargins(0, m, m, m)
+        } else {
+            lp.width = FrameLayout.LayoutParams.MATCH_PARENT
+            lp.height = FrameLayout.LayoutParams.WRAP_CONTENT
+            lp.gravity = Gravity.BOTTOM
+            lp.setMargins(0, 0, 0, 0)
+        }
+        panel.layoutParams = lp
     }
 
     private fun launchPickerForAll() {
@@ -814,7 +869,9 @@ class MainActivity : AppCompatActivity() {
     private fun showPlayersUi() {
         binding.emptyState.root.visibility = View.GONE
         startSessionTimer()
-        revealOverlayUi()
+        // No abrimos el panel de controles al entrar: solo un flash de los nombres.
+        // El panel aparece unicamente al deslizar hacia arriba.
+        flashPanelFeedback()
     }
 
     private fun showEmptyStateUi() {
@@ -1273,7 +1330,7 @@ class MainActivity : AppCompatActivity() {
             if (held) R.string.panel_hold_on_toast else R.string.panel_hold_off_toast,
             Toast.LENGTH_SHORT
         ).show()
-        revealOverlayUi()
+        flashPanelFeedback()
     }
 
     private fun clearHeld() {
@@ -1376,7 +1433,7 @@ class MainActivity : AppCompatActivity() {
         private const val PANEL_COUNT_KEY = "panel_count"
         private const val VOLUME_KEY = "volume_level"
         private const val AUTO_HIDE_DELAY_MS = 7000L
-        private const val SWIPE_MIN_DISTANCE_PX = 90f
+        private const val LABEL_FLASH_MS = 1600L
         private const val GITHUB_OWNER = "nicopyjs"
         private const val GITHUB_REPO = "trivideo"
         private const val UPDATE_APK_FILENAME = "update.apk"
