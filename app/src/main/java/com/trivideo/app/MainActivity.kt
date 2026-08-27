@@ -592,6 +592,7 @@ class MainActivity : AppCompatActivity() {
 
         applyVolumes()
         updatePanelHighlights()
+        updateFavoriteButtons()
     }
 
     private fun onPanelSingleTap(index: Int) {
@@ -661,27 +662,33 @@ class MainActivity : AppCompatActivity() {
         setPanelChrome(false)
     }
 
-    /** Muestra u oculta los nombres y la estrella de cada panel. */
+    /** Muestra u oculta los nombres de cada panel (la estrella es permanente). */
     private fun setPanelChrome(visible: Boolean) {
         val vis = if (visible) View.VISIBLE else View.GONE
         for (i in 0 until activePanelCount) {
             panels[i].labelFilename.visibility = vis
-            panels[i].btnFavorite.visibility = vis
             if (!visible) panels[i].activeBorder.visibility = View.GONE
         }
-        if (visible) updatePanelFavoriteIcons()
     }
 
-    private fun updatePanelFavoriteIcons() {
-        for (i in 0 until activePanelCount) {
+    /** La estrella de Favoritos vive siempre visible en cada panel activo. */
+    private fun updateFavoriteButtons() {
+        for (i in 0 until MAX_PANELS) {
+            val btn = panels[i].btnFavorite
+            if (i >= activePanelCount) {
+                btn.visibility = View.GONE
+                continue
+            }
             val path = prefs.getString(uriKey(i), null)?.let { Uri.parse(it).path }
             val fav = path != null && VideoFileOps.isInFavorites(path)
-            panels[i].btnFavorite.setImageResource(
+            btn.visibility = View.VISIBLE
+            btn.setImageResource(
                 if (fav) R.drawable.ic_star_24 else R.drawable.ic_star_border_24
             )
-            panels[i].btnFavorite.setColorFilter(
+            btn.setColorFilter(
                 getColor(if (fav) R.color.brand_violet else R.color.text_primary)
             )
+            btn.alpha = if (fav) 1f else 0.5f
         }
     }
 
@@ -716,6 +723,7 @@ class MainActivity : AppCompatActivity() {
             getString(R.string.favorite_move_done, VideoFileOps.FAVORITES_DIR_NAME),
             Toast.LENGTH_SHORT
         ).show()
+        updateFavoriteButtons()
         flashPanelFeedback()
     }
 
@@ -918,6 +926,7 @@ class MainActivity : AppCompatActivity() {
     private fun showPlayersUi() {
         binding.emptyState.root.visibility = View.GONE
         startSessionTimer()
+        updateFavoriteButtons()
         // No abrimos el panel de controles al entrar: solo un flash de los nombres.
         // El panel aparece unicamente al deslizar hacia arriba.
         flashPanelFeedback()
@@ -928,6 +937,9 @@ class MainActivity : AppCompatActivity() {
         sessionRunning = false
         binding.emptyState.root.visibility = View.VISIBLE
         binding.controlBar.root.visibility = View.GONE
+        for (i in 0 until MAX_PANELS) {
+            panels[i].btnFavorite.visibility = View.GONE
+        }
     }
 
     private fun startSessionTimer() {
@@ -1358,6 +1370,7 @@ class MainActivity : AppCompatActivity() {
         player.setMediaItem(MediaItem.fromUri(uri))
         player.prepare()
         player.playWhenReady = isPlaying
+        updateFavoriteButtons()
     }
 
     /**
