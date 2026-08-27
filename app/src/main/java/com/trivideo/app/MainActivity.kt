@@ -184,6 +184,7 @@ class MainActivity : AppCompatActivity() {
         updateSpeedLabel()
         updateLayoutLabel()
         updateAutoRotateLabel()
+        updateModeSwitchLabel()
 
         ContextCompat.registerReceiver(
             this,
@@ -258,7 +259,7 @@ class MainActivity : AppCompatActivity() {
             true
         }
         binding.controlBar.btnLock.setOnClickListener { setLocked(true) }
-        binding.controlBar.btnPin.setOnClickListener { pinCurrentAsFixed() }
+        binding.controlBar.btnModeSwitch.setOnClickListener { toggleAppMode() }
         binding.controlBar.btnSaveSet.setOnClickListener { saveCurrentAsSet() }
 
         binding.controlBar.volumeSeekBar.progress = volumeLevel
@@ -459,8 +460,7 @@ class MainActivity : AppCompatActivity() {
     private fun revealOverlayUi() {
         uiHandler.removeCallbacks(hideOverlayRunnable)
         binding.controlBar.root.visibility = View.VISIBLE
-        binding.controlBar.btnPin.visibility =
-            if (appMode == MODE_POOL) View.VISIBLE else View.GONE
+        updateModeSwitchLabel()
         for (i in 0 until activePanelCount) {
             panels[i].labelFilename.visibility = View.VISIBLE
         }
@@ -1112,6 +1112,43 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun updateModeSwitchLabel() {
+        binding.controlBar.btnModeSwitch.text = getString(
+            if (appMode == MODE_POOL) R.string.switch_to_fixed else R.string.switch_to_pool
+        )
+    }
+
+    /**
+     * Switch entre los dos modos con lo que ya esta en pantalla, sin abrir selector:
+     * - pool -> fijo: congela los clips actuales en loop.
+     * - fijo -> pool: los mismos clips pero ahora rotan (tap, fin de clip, auto-rotacion).
+     *   Si nunca se eligio carpeta, abre el selector de carpeta.
+     */
+    private fun toggleAppMode() {
+        if (appMode == MODE_POOL) {
+            pinCurrentAsFixed()
+            return
+        }
+        val folder = poolFolder
+        if (folder == null) {
+            launchFolderPicker()
+            return
+        }
+        appMode = MODE_POOL
+        prefs.edit().putString(MODE_KEY, MODE_POOL).apply()
+        for (i in 0 until activePanelCount) {
+            players[i]?.setRepeatMode(Player.REPEAT_MODE_OFF)
+        }
+        restorePoolIfNeeded()
+        uiHandler.removeCallbacks(autoRotateRunnable)
+        if (autoRotateEnabled) {
+            uiHandler.postDelayed(autoRotateRunnable, autoRotateIntervalSec * 1000L)
+        }
+        Toast.makeText(this, R.string.mode_pool_toast, Toast.LENGTH_SHORT).show()
+        updateModeSwitchLabel()
+        revealOverlayUi()
+    }
+
     /**
      * "Fijar estos": deja de rotar y pasa los clips que estan sonando ahora a modo
      * repetitivo (loop). No abre el selector: usa lo que ya hay en cada panel.
@@ -1121,6 +1158,7 @@ class MainActivity : AppCompatActivity() {
         appMode = MODE_FIXED
         prefs.edit().putString(MODE_KEY, MODE_FIXED).apply()
         clearHeld()
+        updateModeSwitchLabel()
 
         uiHandler.removeCallbacks(autoRotateRunnable)
         if (autoRotateEnabled) {

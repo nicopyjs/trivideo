@@ -45,7 +45,10 @@
     <string name="play_set_button">Reproducir este set</string>
 
     <string name="random_folder_button">Carpeta al azar</string>
-    <string name="random_button_short">Aleatorio</string>
+    <string name="random_button_short">Elegir carpeta</string>
+    <string name="switch_to_fixed">▸ Modo fijo</string>
+    <string name="switch_to_pool">▸ Modo aleatorio</string>
+    <string name="mode_pool_toast">Modo aleatorio · toca los paneles para cambiarlos</string>
     <string name="picker_use_folder">Usar esta carpeta</string>
     <string name="picker_folder_mode_hint">Navega hasta la carpeta con tus videos y toca \"Usar esta carpeta\"</string>
     <string name="scanning_folder">Buscando videos…</string>
@@ -62,7 +65,6 @@
     <string name="panel_hold_on_toast">Panel retenido · los demás siguen rotando</string>
     <string name="panel_hold_off_toast">Panel liberado, vuelve a rotar</string>
     <string name="panel_held_tap_toast">Panel retenido · mantén presionado para soltarlo</string>
-    <string name="pin_current">Fijar estos</string>
     <string name="pinned_toast">Listo: ahora estos videos se repiten en loop</string>
     <string name="save_current_set">Guardar set</string>
     <string name="layout_auto">Auto</string>
