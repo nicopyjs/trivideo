@@ -43,6 +43,15 @@
     <string name="delete_set_message">¿Eliminar el set \"%1$s\"?</string>
     <string name="set_saved_toast">Set \"%1$s\" guardado</string>
     <string name="play_set_button">Reproducir este set</string>
+    <string name="rename_video_title">Renombrar video</string>
+    <string name="rename_video_hint">Nuevo nombre (sin extensión)</string>
+    <string name="rename_video_failed">No se pudo renombrar el archivo</string>
+    <string name="rename_video_done">Renombrado a \"%1$s\"</string>
+    <string name="favorite_move_action">Mover a Favoritos</string>
+    <string name="favorite_move_done">Movido a /%1$s</string>
+    <string name="favorite_move_failed">No se pudo mover el archivo</string>
+    <string name="favorite_already">Ya está en /%1$s</string>
+    <string name="storage_needed_for_org">Se necesita acceso a todos los archivos para organizar videos</string>
 
     <string name="random_folder_button">Carpeta al azar</string>
     <string name="random_button_short">Elegir carpeta</string>
