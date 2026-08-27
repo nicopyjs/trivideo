@@ -33,6 +33,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -83,6 +84,7 @@ class MainActivity : AppCompatActivity() {
     private var isLocked: Boolean = false
     private var sessionStartMs: Long = 0L
     private var sessionRunning: Boolean = false
+    private var syncingControls: Boolean = false
 
     private val uiHandler = Handler(Looper.getMainLooper())
     private val hideOverlayRunnable = Runnable { hideOverlayUi() }
@@ -180,11 +182,10 @@ class MainActivity : AppCompatActivity() {
         setupEmptyState()
         setupControlBar()
         setupLockOverlay()
+        setupGestureHint()
         setupUpdateBanner()
-        updateSpeedLabel()
-        updateLayoutLabel()
-        updateAutoRotateLabel()
-        updateModeSwitchLabel()
+        applyPanelInsets()
+        syncControls()
 
         ContextCompat.registerReceiver(
             this,
@@ -226,44 +227,84 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupControlBar() {
-        binding.controlBar.btnChangeVideos.setOnClickListener { launchPickerForAll() }
-        binding.controlBar.btnSets.setOnClickListener {
-            videoSetsLauncher.launch(Intent(this, VideoSetsActivity::class.java))
-        }
-        binding.controlBar.btnRandom.setOnClickListener { launchFolderPicker() }
-        binding.controlBar.btnPlayPause.setOnClickListener { toggleMasterPlayPause() }
-        binding.controlBar.btnMuteAll.setOnClickListener {
+        val cb = binding.controlBar
+
+        cb.btnPlayPause.setOnClickListener { toggleMasterPlayPause() }
+        cb.btnMuteAll.setOnClickListener {
             activeIndex = -1
             applyVolumes()
             updatePanelHighlights()
             revealOverlayUi()
         }
-        binding.controlBar.btnSpeed.setOnClickListener {
-            speedIndex = (speedIndex + 1) % SPEED_VALUES.size
+        cb.btnLock.setOnClickListener { setLocked(true) }
+
+        cb.btnPickFolder.setOnClickListener { launchFolderPicker() }
+        cb.btnChangeVideos.setOnClickListener { launchPickerForAll() }
+        cb.btnSets.setOnClickListener {
+            videoSetsLauncher.launch(Intent(this, VideoSetsActivity::class.java))
+        }
+        cb.btnSaveSet.setOnClickListener { saveCurrentAsSet() }
+
+        cb.modeToggle.addOnButtonCheckedListener { _, checkedId, isChecked ->
+            if (syncingControls || !isChecked) return@addOnButtonCheckedListener
+            if (checkedId == R.id.btnModePool) switchToPoolMode() else switchToFixedMode()
+        }
+
+        cb.speedChips.setOnCheckedStateChangeListener { _, checkedIds ->
+            if (syncingControls) return@setOnCheckedStateChangeListener
+            val idx = when (checkedIds.firstOrNull()) {
+                R.id.chipSpeed050 -> 0
+                R.id.chipSpeed075 -> 1
+                R.id.chipSpeed125 -> 3
+                R.id.chipSpeed150 -> 4
+                R.id.chipSpeed200 -> 5
+                R.id.chipSpeed100 -> 2
+                else -> return@setOnCheckedStateChangeListener
+            }
+            speedIndex = idx
             prefs.edit().putInt(SPEED_INDEX_KEY, speedIndex).apply()
             applySpeed()
-            updateSpeedLabel()
             revealOverlayUi()
         }
-        binding.controlBar.btnLayout.setOnClickListener {
-            cycleLayoutMode()
-            revealOverlayUi()
-        }
-        binding.controlBar.btnAutoRotate.setOnClickListener {
-            toggleAutoRotate()
-            revealOverlayUi()
-        }
-        binding.controlBar.btnAutoRotate.setOnLongClickListener {
-            cycleAutoRotateInterval()
-            revealOverlayUi()
-            true
-        }
-        binding.controlBar.btnLock.setOnClickListener { setLocked(true) }
-        binding.controlBar.btnModeSwitch.setOnClickListener { toggleAppMode() }
-        binding.controlBar.btnSaveSet.setOnClickListener { saveCurrentAsSet() }
 
-        binding.controlBar.volumeSeekBar.progress = volumeLevel
-        binding.controlBar.volumeSeekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+        cb.layoutToggle.addOnButtonCheckedListener { _, checkedId, isChecked ->
+            if (syncingControls || !isChecked) return@addOnButtonCheckedListener
+            layoutMode = when (checkedId) {
+                R.id.btnLayoutCol -> LAYOUT_ONE_COL
+                R.id.btnLayoutRow -> LAYOUT_ONE_ROW
+                R.id.btnLayoutGrid -> LAYOUT_GRID_2X2
+                else -> LAYOUT_AUTO
+            }
+            prefs.edit().putInt(LAYOUT_MODE_KEY, layoutMode).apply()
+            currentGridShape = null
+            maybeRebuildGrid()
+            revealOverlayUi()
+        }
+
+        cb.switchAutoRotate.setOnCheckedChangeListener { _, checked ->
+            if (syncingControls) return@setOnCheckedChangeListener
+            setAutoRotate(checked)
+            revealOverlayUi()
+        }
+
+        cb.rotateChips.setOnCheckedStateChangeListener { _, checkedIds ->
+            if (syncingControls) return@setOnCheckedStateChangeListener
+            autoRotateIntervalSec = when (checkedIds.firstOrNull()) {
+                R.id.chipRot15 -> 15
+                R.id.chipRot60 -> 60
+                R.id.chipRot120 -> 120
+                else -> 30
+            }
+            prefs.edit().putInt(AUTO_ROTATE_INTERVAL_KEY, autoRotateIntervalSec).apply()
+            if (autoRotateEnabled) {
+                uiHandler.removeCallbacks(autoRotateRunnable)
+                uiHandler.postDelayed(autoRotateRunnable, autoRotateIntervalSec * 1000L)
+            }
+            revealOverlayUi()
+        }
+
+        cb.volumeSeekBar.progress = volumeLevel
+        cb.volumeSeekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
                 if (!fromUser) return
                 volumeLevel = progress
@@ -281,6 +322,122 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         })
+    }
+
+    private fun setupGestureHint() {
+        binding.gestureHint.setOnClickListener { dismissGestureHint() }
+        binding.btnGestureHintOk.setOnClickListener { dismissGestureHint() }
+    }
+
+    private fun maybeShowGestureHint() {
+        if (prefs.getBoolean(SEEN_GESTURE_HINT_KEY, false)) return
+        binding.gestureHint.visibility = View.VISIBLE
+    }
+
+    private fun dismissGestureHint() {
+        binding.gestureHint.visibility = View.GONE
+        prefs.edit().putBoolean(SEEN_GESTURE_HINT_KEY, true).apply()
+    }
+
+    private fun applyPanelInsets() {
+        val basePad = dp(20f)
+        ViewCompat.setOnApplyWindowInsetsListener(binding.controlBar.panelContent) { v, insets ->
+            val bottom = insets.getInsets(WindowInsetsCompat.Type.systemBars()).bottom
+            v.setPadding(v.paddingLeft, v.paddingTop, v.paddingRight, basePad + bottom)
+            insets
+        }
+    }
+
+    private fun dp(value: Float): Int = (value * resources.displayMetrics.density).toInt()
+
+    /** Sincroniza todos los controles del panel con el estado actual, sin disparar sus listeners. */
+    private fun syncControls() {
+        val cb = binding.controlBar
+        syncingControls = true
+
+        cb.modeToggle.check(if (appMode == MODE_POOL) R.id.btnModePool else R.id.btnModeFixed)
+
+        cb.speedChips.check(
+            when (speedIndex) {
+                0 -> R.id.chipSpeed050
+                1 -> R.id.chipSpeed075
+                3 -> R.id.chipSpeed125
+                4 -> R.id.chipSpeed150
+                5 -> R.id.chipSpeed200
+                else -> R.id.chipSpeed100
+            }
+        )
+
+        cb.layoutToggle.check(
+            when (layoutMode) {
+                LAYOUT_ONE_COL -> R.id.btnLayoutCol
+                LAYOUT_ONE_ROW -> R.id.btnLayoutRow
+                LAYOUT_GRID_2X2 -> R.id.btnLayoutGrid
+                else -> R.id.btnLayoutAuto
+            }
+        )
+        cb.btnLayoutGrid.isEnabled = activePanelCount >= 3
+
+        cb.switchAutoRotate.isChecked = autoRotateEnabled
+        cb.rotateChips.check(
+            when (autoRotateIntervalSec) {
+                15 -> R.id.chipRot15
+                60 -> R.id.chipRot60
+                120 -> R.id.chipRot120
+                else -> R.id.chipRot30
+            }
+        )
+        for (i in 0 until cb.rotateChips.childCount) {
+            cb.rotateChips.getChildAt(i).isEnabled = autoRotateEnabled
+        }
+
+        cb.btnPlayPause.setImageResource(
+            if (isPlaying) R.drawable.ic_pause_24 else R.drawable.ic_play_24
+        )
+
+        syncingControls = false
+    }
+
+    private fun setAutoRotate(enabled: Boolean) {
+        if (enabled && appMode != MODE_POOL) {
+            Toast.makeText(this, R.string.auto_rotate_only_pool, Toast.LENGTH_SHORT).show()
+            syncControls()
+            return
+        }
+        autoRotateEnabled = enabled
+        prefs.edit().putBoolean(AUTO_ROTATE_KEY, enabled).apply()
+        uiHandler.removeCallbacks(autoRotateRunnable)
+        if (enabled) {
+            uiHandler.postDelayed(autoRotateRunnable, autoRotateIntervalSec * 1000L)
+        }
+        syncControls()
+    }
+
+    private fun switchToPoolMode() {
+        if (appMode == MODE_POOL) return
+        val folder = poolFolder
+        if (folder == null) {
+            launchFolderPicker()
+            syncControls()
+            return
+        }
+        appMode = MODE_POOL
+        prefs.edit().putString(MODE_KEY, MODE_POOL).apply()
+        for (i in 0 until activePanelCount) {
+            players[i]?.setRepeatMode(Player.REPEAT_MODE_OFF)
+        }
+        restorePoolIfNeeded()
+        uiHandler.removeCallbacks(autoRotateRunnable)
+        if (autoRotateEnabled) {
+            uiHandler.postDelayed(autoRotateRunnable, autoRotateIntervalSec * 1000L)
+        }
+        Toast.makeText(this, R.string.mode_pool_toast, Toast.LENGTH_SHORT).show()
+        revealOverlayUi()
+    }
+
+    private fun switchToFixedMode() {
+        if (appMode == MODE_FIXED) return
+        pinCurrentAsFixed()
     }
 
     private fun setupPanels() {
@@ -459,8 +616,18 @@ class MainActivity : AppCompatActivity() {
 
     private fun revealOverlayUi() {
         uiHandler.removeCallbacks(hideOverlayRunnable)
-        binding.controlBar.root.visibility = View.VISIBLE
-        updateModeSwitchLabel()
+        val panel = binding.controlBar.root
+        val wasHidden = panel.visibility != View.VISIBLE
+        panel.visibility = View.VISIBLE
+        syncControls()
+        if (wasHidden && animationsEnabled()) {
+            panel.alpha = 0f
+            panel.translationY = dp(20f).toFloat()
+            panel.animate().alpha(1f).translationY(0f).setDuration(200L).start()
+        } else {
+            panel.alpha = 1f
+            panel.translationY = 0f
+        }
         for (i in 0 until activePanelCount) {
             panels[i].labelFilename.visibility = View.VISIBLE
         }
@@ -471,11 +638,23 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun hideOverlayUi() {
-        binding.controlBar.root.visibility = View.GONE
+        val panel = binding.controlBar.root
+        panel.animate().cancel()
+        panel.alpha = 1f
+        panel.translationY = 0f
+        panel.visibility = View.GONE
         for (i in 0 until activePanelCount) {
             panels[i].labelFilename.visibility = View.GONE
             panels[i].activeBorder.visibility = View.GONE
         }
+    }
+
+    private fun animationsEnabled(): Boolean = try {
+        Settings.Global.getFloat(
+            contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f
+        ) != 0f
+    } catch (_: Exception) {
+        true
     }
 
     private fun launchPickerForAll() {
@@ -1042,6 +1221,7 @@ class MainActivity : AppCompatActivity() {
         if (autoRotateEnabled) {
             uiHandler.postDelayed(autoRotateRunnable, autoRotateIntervalSec * 1000L)
         }
+        maybeShowGestureHint()
     }
 
     private fun currentlyShownPaths(): Set<String> =
@@ -1112,59 +1292,20 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun updateModeSwitchLabel() {
-        binding.controlBar.btnModeSwitch.text = getString(
-            if (appMode == MODE_POOL) R.string.switch_to_fixed else R.string.switch_to_pool
-        )
-    }
-
     /**
-     * Switch entre los dos modos con lo que ya esta en pantalla, sin abrir selector:
-     * - pool -> fijo: congela los clips actuales en loop.
-     * - fijo -> pool: los mismos clips pero ahora rotan (tap, fin de clip, auto-rotacion).
-     *   Si nunca se eligio carpeta, abre el selector de carpeta.
-     */
-    private fun toggleAppMode() {
-        if (appMode == MODE_POOL) {
-            pinCurrentAsFixed()
-            return
-        }
-        val folder = poolFolder
-        if (folder == null) {
-            launchFolderPicker()
-            return
-        }
-        appMode = MODE_POOL
-        prefs.edit().putString(MODE_KEY, MODE_POOL).apply()
-        for (i in 0 until activePanelCount) {
-            players[i]?.setRepeatMode(Player.REPEAT_MODE_OFF)
-        }
-        restorePoolIfNeeded()
-        uiHandler.removeCallbacks(autoRotateRunnable)
-        if (autoRotateEnabled) {
-            uiHandler.postDelayed(autoRotateRunnable, autoRotateIntervalSec * 1000L)
-        }
-        Toast.makeText(this, R.string.mode_pool_toast, Toast.LENGTH_SHORT).show()
-        updateModeSwitchLabel()
-        revealOverlayUi()
-    }
-
-    /**
-     * "Fijar estos": deja de rotar y pasa los clips que estan sonando ahora a modo
-     * repetitivo (loop). No abre el selector: usa lo que ya hay en cada panel.
+     * pool -> fijo, con lo que ya esta en pantalla: deja de rotar y pone los clips
+     * actuales en loop. No abre el selector.
      */
     private fun pinCurrentAsFixed() {
         if (appMode != MODE_POOL) return
         appMode = MODE_FIXED
         prefs.edit().putString(MODE_KEY, MODE_FIXED).apply()
         clearHeld()
-        updateModeSwitchLabel()
 
         uiHandler.removeCallbacks(autoRotateRunnable)
         if (autoRotateEnabled) {
             autoRotateEnabled = false
             prefs.edit().putBoolean(AUTO_ROTATE_KEY, false).apply()
-            updateAutoRotateLabel()
         }
         for (i in 0 until activePanelCount) {
             players[i]?.setRepeatMode(Player.REPEAT_MODE_ALL)
@@ -1213,75 +1354,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun updateSpeedLabel() {
-        val value = SPEED_VALUES[speedIndex]
-        val text = if (value == value.toLong().toFloat()) {
-            value.toLong().toString()
-        } else {
-            value.toString()
-        }
-        binding.controlBar.btnSpeed.text = getString(R.string.speed_label, text)
-    }
-
-    private fun cycleLayoutMode() {
-        var next = (layoutMode + 1) % 4
-        if (next == LAYOUT_GRID_2X2 && activePanelCount < 3) {
-            next = LAYOUT_AUTO
-        }
-        layoutMode = next
-        prefs.edit().putInt(LAYOUT_MODE_KEY, layoutMode).apply()
-        currentGridShape = null
-        maybeRebuildGrid()
-        updateLayoutLabel()
-    }
-
-    private fun updateLayoutLabel() {
-        val res = when (layoutMode) {
-            LAYOUT_ONE_COL -> R.string.layout_one_col
-            LAYOUT_ONE_ROW -> R.string.layout_one_row
-            LAYOUT_GRID_2X2 -> R.string.layout_grid
-            else -> R.string.layout_auto
-        }
-        binding.controlBar.btnLayout.text = getString(res)
-    }
-
-    private fun toggleAutoRotate() {
-        if (appMode != MODE_POOL) {
-            Toast.makeText(this, R.string.auto_rotate_only_pool, Toast.LENGTH_SHORT).show()
-            return
-        }
-        autoRotateEnabled = !autoRotateEnabled
-        prefs.edit().putBoolean(AUTO_ROTATE_KEY, autoRotateEnabled).apply()
-        uiHandler.removeCallbacks(autoRotateRunnable)
-        if (autoRotateEnabled) {
-            uiHandler.postDelayed(autoRotateRunnable, autoRotateIntervalSec * 1000L)
-        }
-        updateAutoRotateLabel()
-    }
-
-    private fun cycleAutoRotateInterval() {
-        val currentIdx = ROTATE_INTERVALS.indexOf(autoRotateIntervalSec).takeIf { it >= 0 } ?: 1
-        autoRotateIntervalSec = ROTATE_INTERVALS[(currentIdx + 1) % ROTATE_INTERVALS.size]
-        prefs.edit().putInt(AUTO_ROTATE_INTERVAL_KEY, autoRotateIntervalSec).apply()
-        Toast.makeText(
-            this,
-            getString(R.string.auto_rotate_interval_toast, autoRotateIntervalSec),
-            Toast.LENGTH_SHORT
-        ).show()
-        if (autoRotateEnabled) {
-            uiHandler.removeCallbacks(autoRotateRunnable)
-            uiHandler.postDelayed(autoRotateRunnable, autoRotateIntervalSec * 1000L)
-        }
-        updateAutoRotateLabel()
-    }
-
-    private fun updateAutoRotateLabel() {
-        binding.controlBar.btnAutoRotate.text = if (autoRotateEnabled) {
-            getString(R.string.auto_rotate_on, autoRotateIntervalSec)
-        } else {
-            getString(R.string.auto_rotate_off)
-        }
-    }
 
     private fun setupLockOverlay() {
         binding.lockOverlay.setOnClickListener { /* traga toques */ }
@@ -1321,6 +1393,7 @@ class MainActivity : AppCompatActivity() {
         private const val LAYOUT_MODE_KEY = "layout_mode"
         private const val AUTO_ROTATE_KEY = "auto_rotate"
         private const val AUTO_ROTATE_INTERVAL_KEY = "auto_rotate_interval"
+        private const val SEEN_GESTURE_HINT_KEY = "seen_gesture_hint"
 
         private val SPEED_VALUES = floatArrayOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f)
         private const val DEFAULT_SPEED_INDEX = 2
@@ -1330,7 +1403,6 @@ class MainActivity : AppCompatActivity() {
         private const val LAYOUT_ONE_ROW = 2
         private const val LAYOUT_GRID_2X2 = 3
 
-        private val ROTATE_INTERVALS = intArrayOf(15, 30, 60, 120)
         private const val DEFAULT_ROTATE_INTERVAL = 30
     }
 }

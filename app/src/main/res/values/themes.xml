@@ -5,5 +5,32 @@
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowLayoutInDisplayCutoutMode" tools:targetApi="27">shortEdges</item>
+
+        <!-- Marca: los componentes Material toman estos tokens -->
+        <item name="colorPrimary">@color/brand_violet</item>
+        <item name="colorPrimaryDark">@color/brand_violet_pressed</item>
+        <item name="colorOnPrimary">@color/on_brand_violet</item>
+        <item name="colorSecondary">@color/brand_violet</item>
+        <item name="colorOnSecondary">@color/on_brand_violet</item>
+        <item name="colorSecondaryContainer">@color/brand_violet</item>
+        <item name="colorOnSecondaryContainer">@color/on_brand_violet</item>
+    </style>
+
+    <!-- Chip de opción (velocidad, intervalos) -->
+    <style name="Widget.TriVideo.Chip" parent="Widget.Material3.Chip.Filter">
+        <item name="chipBackgroundColor">@color/sel_chip_bg</item>
+        <item name="android:textColor">@color/sel_chip_text</item>
+        <item name="chipStrokeColor">@color/sel_chip_stroke</item>
+        <item name="chipStrokeWidth">1dp</item>
+        <item name="checkedIconVisible">false</item>
+        <item name="ensureMinTouchTargetSize">true</item>
+    </style>
+
+    <!-- Botón dentro de un MaterialButtonToggleGroup (modo, distribución) -->
+    <style name="Widget.TriVideo.ToggleButton" parent="Widget.Material3.Button.OutlinedButton">
+        <item name="android:backgroundTint">@color/sel_toggle_bg</item>
+        <item name="android:textColor">@color/sel_toggle_text</item>
+        <item name="iconTint">@color/sel_toggle_text</item>
+        <item name="strokeColor">@color/sel_chip_stroke</item>
     </style>
 </resources>

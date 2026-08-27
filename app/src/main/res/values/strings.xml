@@ -46,8 +46,6 @@
 
     <string name="random_folder_button">Carpeta al azar</string>
     <string name="random_button_short">Elegir carpeta</string>
-    <string name="switch_to_fixed">▸ Modo fijo</string>
-    <string name="switch_to_pool">▸ Modo aleatorio</string>
     <string name="mode_pool_toast">Modo aleatorio · toca los paneles para cambiarlos</string>
     <string name="picker_use_folder">Usar esta carpeta</string>
     <string name="picker_folder_mode_hint">Navega hasta la carpeta con tus videos y toca \"Usar esta carpeta\"</string>
@@ -58,19 +56,28 @@
     <string name="lock_controls">Bloquear controles</string>
     <string name="unlock_controls">Desbloquear</string>
     <string name="auto_rotate_only_pool">La auto-rotación solo funciona con \"Carpeta al azar\"</string>
-    <string name="auto_rotate_interval_toast">Auto-rotación cada %1$d s</string>
-    <string name="auto_rotate_off">Rotar: off</string>
-    <string name="auto_rotate_on">Rotar: %1$ds</string>
     <string name="panel_held_badge">● RETENIDO</string>
     <string name="panel_hold_on_toast">Panel retenido · los demás siguen rotando</string>
     <string name="panel_hold_off_toast">Panel liberado, vuelve a rotar</string>
     <string name="panel_held_tap_toast">Panel retenido · mantén presionado para soltarlo</string>
     <string name="pinned_toast">Listo: ahora estos videos se repiten en loop</string>
     <string name="save_current_set">Guardar set</string>
+    <string name="section_mode">Modo</string>
+    <string name="section_speed">Velocidad</string>
+    <string name="section_layout">Distribución</string>
+    <string name="section_autorotate">Auto-rotación de paneles</string>
+    <string name="section_actions">Acciones</string>
+    <string name="mode_pool_label">Aleatorio</string>
+    <string name="mode_fixed_label">Fijo</string>
+    <string name="gesture_hint_title">Gestos sobre los paneles</string>
+    <string name="gesture_hint_tap">Un toque · siguiente clip al azar</string>
+    <string name="gesture_hint_long">Mantener presionado · retener o soltar el panel</string>
+    <string name="gesture_hint_double">Doble toque · elegir un video a mano</string>
+    <string name="gesture_hint_swipe">Deslizar hacia arriba · abrir los controles</string>
+    <string name="gesture_hint_ok">Entendido</string>
     <string name="layout_auto">Auto</string>
     <string name="layout_one_col">Columna</string>
     <string name="layout_one_row">Fila</string>
     <string name="layout_grid">2x2</string>
-    <string name="speed_label">%1$sx</string>
     <string name="session_timer_initial">00:00</string>
 </resources>

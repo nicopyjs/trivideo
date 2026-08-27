@@ -1,4 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="black">#FF000000</color>
+
+    <!-- Marca TriVideo -->
+    <color name="brand_violet">#FF7C4DFF</color>
+    <color name="brand_violet_pressed">#FF651FFF</color>
+    <color name="brand_violet_container">#FF2A2140</color>
+    <color name="on_brand_violet">#FFFFFFFF</color>
+
+    <!-- Superficie del panel de controles (glass oscuro) -->
+    <color name="panel_surface">#F2121016</color>
+    <color name="panel_surface_elevated">#FF1E1B24</color>
+    <color name="panel_divider">#1FFFFFFF</color>
+    <color name="panel_scrim">#B3000000</color>
+
+    <!-- Texto sobre superficie oscura -->
+    <color name="text_primary">#FFFFFFFF</color>
+    <color name="text_secondary">#B3FFFFFF</color>
+    <color name="text_disabled">#61FFFFFF</color>
+
+    <!-- Control sin seleccionar -->
+    <color name="control_idle">#1FFFFFFF</color>
+    <color name="control_idle_stroke">#33FFFFFF</color>
 </resources>

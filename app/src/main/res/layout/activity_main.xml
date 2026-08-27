@@ -51,4 +51,72 @@
         android:layout_height="wrap_content"
         android:layout_gravity="top" />
 
+    <FrameLayout
+        android:id="@+id/gestureHint"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@color/panel_scrim"
+        android:clickable="true"
+        android:focusable="true"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:orientation="vertical"
+            android:gravity="start"
+            android:padding="28dp">
+
+            <TextView
+                style="@style/TextAppearance.Material3.TitleLarge"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="18dp"
+                android:textColor="@color/text_primary"
+                android:text="@string/gesture_hint_title" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                android:textColor="@color/text_secondary"
+                android:textSize="15sp"
+                android:text="@string/gesture_hint_tap" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                android:textColor="@color/text_secondary"
+                android:textSize="15sp"
+                android:text="@string/gesture_hint_long" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                android:textColor="@color/text_secondary"
+                android:textSize="15sp"
+                android:text="@string/gesture_hint_double" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="24dp"
+                android:textColor="@color/text_secondary"
+                android:textSize="15sp"
+                android:text="@string/gesture_hint_swipe" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnGestureHintOk"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="end"
+                android:text="@string/gesture_hint_ok" />
+
+        </LinearLayout>
+
+    </FrameLayout>
+
 </FrameLayout>
