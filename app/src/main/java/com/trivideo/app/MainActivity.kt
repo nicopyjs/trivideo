@@ -92,10 +92,7 @@ class MainActivity : AppCompatActivity() {
     private val hideOverlayRunnable = Runnable { hideOverlayUi() }
     private val hideLabelsRunnable = Runnable {
         if (binding.controlBar.root.visibility != View.VISIBLE) {
-            for (i in 0 until activePanelCount) {
-                panels[i].labelFilename.visibility = View.GONE
-                panels[i].activeBorder.visibility = View.GONE
-            }
+            setPanelChrome(false)
         }
     }
 
@@ -520,6 +517,7 @@ class MainActivity : AppCompatActivity() {
                 true
             }
             panel.root.setOnDragListener { view, event -> onPanelDragEvent(index, view, event) }
+            panel.btnFavorite.setOnClickListener { favoritePanelVideo(index) }
         }
     }
 
@@ -645,9 +643,7 @@ class MainActivity : AppCompatActivity() {
             panel.translationX = 0f
             panel.translationY = 0f
         }
-        for (i in 0 until activePanelCount) {
-            panels[i].labelFilename.visibility = View.VISIBLE
-        }
+        setPanelChrome(true)
         updatePanelHighlights()
         if (isPlaying) {
             uiHandler.postDelayed(hideOverlayRunnable, AUTO_HIDE_DELAY_MS)
@@ -662,10 +658,65 @@ class MainActivity : AppCompatActivity() {
         panel.translationX = 0f
         panel.translationY = 0f
         panel.visibility = View.GONE
+        setPanelChrome(false)
+    }
+
+    /** Muestra u oculta los nombres y la estrella de cada panel. */
+    private fun setPanelChrome(visible: Boolean) {
+        val vis = if (visible) View.VISIBLE else View.GONE
         for (i in 0 until activePanelCount) {
-            panels[i].labelFilename.visibility = View.GONE
-            panels[i].activeBorder.visibility = View.GONE
+            panels[i].labelFilename.visibility = vis
+            panels[i].btnFavorite.visibility = vis
+            if (!visible) panels[i].activeBorder.visibility = View.GONE
         }
+        if (visible) updatePanelFavoriteIcons()
+    }
+
+    private fun updatePanelFavoriteIcons() {
+        for (i in 0 until activePanelCount) {
+            val path = prefs.getString(uriKey(i), null)?.let { Uri.parse(it).path }
+            val fav = path != null && VideoFileOps.isInFavorites(path)
+            panels[i].btnFavorite.setImageResource(
+                if (fav) R.drawable.ic_star_24 else R.drawable.ic_star_border_24
+            )
+            panels[i].btnFavorite.setColorFilter(
+                getColor(if (fav) R.color.brand_violet else R.color.text_primary)
+            )
+        }
+    }
+
+    private fun favoritePanelVideo(index: Int) {
+        if (index !in 0 until activePanelCount) return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R &&
+            !Environment.isExternalStorageManager()
+        ) {
+            Toast.makeText(this, R.string.storage_needed_for_org, Toast.LENGTH_LONG).show()
+            return
+        }
+        val path = prefs.getString(uriKey(index), null)?.let { Uri.parse(it).path } ?: return
+        if (VideoFileOps.isInFavorites(path)) {
+            Toast.makeText(
+                this,
+                getString(R.string.favorite_already, VideoFileOps.FAVORITES_DIR_NAME),
+                Toast.LENGTH_SHORT
+            ).show()
+            flashPanelFeedback()
+            return
+        }
+        val newFile = VideoFileOps.moveToFavorites(this, path)
+        if (newFile == null) {
+            Toast.makeText(this, R.string.favorite_move_failed, Toast.LENGTH_SHORT).show()
+            return
+        }
+        VideoFileOps.updateReferences(this, path, newFile)
+        poolClips = poolClips.filterNot { it == path }
+        panels[index].labelFilename.text = newFile.name
+        Toast.makeText(
+            this,
+            getString(R.string.favorite_move_done, VideoFileOps.FAVORITES_DIR_NAME),
+            Toast.LENGTH_SHORT
+        ).show()
+        flashPanelFeedback()
     }
 
     private fun animationsEnabled(): Boolean = try {
@@ -683,9 +734,7 @@ class MainActivity : AppCompatActivity() {
      */
     private fun flashPanelFeedback() {
         uiHandler.removeCallbacks(hideLabelsRunnable)
-        for (i in 0 until activePanelCount) {
-            panels[i].labelFilename.visibility = View.VISIBLE
-        }
+        setPanelChrome(true)
         updatePanelHighlights()
         if (binding.controlBar.root.visibility != View.VISIBLE) {
             uiHandler.postDelayed(hideLabelsRunnable, LABEL_FLASH_MS)
