@@ -41,4 +41,9 @@ object MediaPool {
 
     fun cachedFor(folderPath: String): List<String> =
         if (cachedFolder == folderPath) cachedClips else emptyList()
+
+    /** Mantiene el cache al dia cuando la lista cambia sin re-escanear (favoritos, categorias). */
+    fun replaceCached(folderPath: String, clips: List<String>) {
+        if (cachedFolder == folderPath) cachedClips = clips
+    }
 }

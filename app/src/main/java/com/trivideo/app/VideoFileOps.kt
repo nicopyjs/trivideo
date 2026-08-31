@@ -19,9 +19,46 @@ object VideoFileOps {
 
     fun favoritesDir(): File = File(Environment.getExternalStorageDirectory(), FAVORITES_DIR_NAME)
 
+    /** Carpeta de una categoria: /Favoritos/<code>. */
+    fun categoryDir(code: String): File = File(favoritesDir(), code)
+
     fun isInFavorites(path: String): Boolean {
         val parent = File(path).parentFile ?: return false
         return parent.absolutePath == favoritesDir().absolutePath
+    }
+
+    /** Devuelve el code de la categoria (subcarpeta de /Favoritos) en la que esta el archivo, o null. */
+    fun categoryOf(path: String): String? {
+        val parent = File(path).parentFile ?: return null
+        val grand = parent.parentFile ?: return null
+        return if (grand.absolutePath == favoritesDir().absolutePath) parent.name else null
+    }
+
+    /**
+     * Mueve el archivo a /Favoritos/<code> (crea la carpeta). Devuelve el nuevo File o null.
+     * El caller debe llamar a updateReferences() con el resultado.
+     */
+    fun moveToCategory(context: Context, path: String, code: String): File? {
+        val src = File(path)
+        if (!src.exists()) return null
+        val dir = categoryDir(code)
+        if (src.parentFile?.absolutePath == dir.absolutePath) return src
+        if (!dir.exists() && !dir.mkdirs()) return null
+        val target = uniqueTarget(File(dir, src.name))
+        val ok = src.renameTo(target) || copyThenDelete(src, target)
+        return if (ok) {
+            scan(context, src.absolutePath, target.absolutePath)
+            target
+        } else {
+            null
+        }
+    }
+
+    /** Saca el archivo de su categoria y lo deja en /Favoritos a secas. Devuelve el nuevo File o null. */
+    fun removeFromCategory(context: Context, path: String): File? {
+        if (categoryOf(path) == null) return File(path)
+        // El archivo esta en una subcarpeta, asi que moveToFavorites lo lleva a la raiz sin cortocircuitar.
+        return moveToFavorites(context, path)
     }
 
     fun sanitizeBaseName(raw: String): String =

@@ -78,6 +78,13 @@ class MainActivity : AppCompatActivity() {
     private var appMode: String = MODE_FIXED
     private var poolFolder: String? = null
     private var poolClips: List<String> = emptyList()
+    private var poolClipsSet: Set<String> = emptySet()
+    /** Vista de poolClips restringida por el filtro de categorias (= poolClips si no hay filtro). */
+    private var activeClips: List<String> = emptyList()
+    /** Codes de categoria activos en el filtro del pool; vacio = sin filtro (todas). */
+    private var categoryFilter: MutableSet<String> = mutableSetOf()
+    /** Bolsa de barajado: clips que faltan reproducir en el ciclo actual (se saca del final). */
+    private var poolBag: MutableList<String> = mutableListOf()
     private val heldPanels = BooleanArray(MAX_PANELS)
     private var speedIndex: Int = DEFAULT_SPEED_INDEX
     private var layoutMode: Int = LAYOUT_AUTO
@@ -254,6 +261,18 @@ class MainActivity : AppCompatActivity() {
         }
         cb.btnSaveSet.setOnClickListener { saveCurrentAsSet() }
 
+        cb.btnPoolCategory.setOnClickListener { showPoolByCategoryDialog() }
+        cb.categoryFilterChips.setOnCheckedStateChangeListener { group, _ ->
+            if (syncingControls) return@setOnCheckedStateChangeListener
+            val selected = buildSet {
+                for (i in 0 until group.childCount) {
+                    val chip = group.getChildAt(i) as? com.google.android.material.chip.Chip ?: continue
+                    if (chip.isChecked) (chip.tag as? String)?.let { add(it) }
+                }
+            }
+            applyCategoryFilter(selected)
+        }
+
         cb.modeToggle.addOnButtonCheckedListener { _, checkedId, isChecked ->
             if (syncingControls || !isChecked) return@addOnButtonCheckedListener
             if (checkedId == R.id.btnModePool) switchToPoolMode() else switchToFixedMode()
@@ -404,7 +423,57 @@ class MainActivity : AppCompatActivity() {
             if (isPlaying) R.drawable.ic_pause_24 else R.drawable.ic_play_24
         )
 
+        rebuildCategoryChips()
+
         syncingControls = false
+    }
+
+    /**
+     * Seccion de categorias del panel: visible solo en modo aleatorio. Los chips de
+     * filtro se arman con las categorias realmente presentes en el pool actual; el
+     * scroll se oculta si no hay ninguna (pero los botones Ver categoria / Categorias
+     * siguen disponibles).
+     */
+    private fun rebuildCategoryChips() {
+        val cb = binding.controlBar
+        val group = cb.categoryFilterChips
+
+        val inPool = appMode == MODE_POOL
+        cb.categorySection.visibility = if (inPool) View.VISIBLE else View.GONE
+        group.removeAllViews()
+        if (!inPool) return
+
+        val present = LinkedHashSet<String>()
+        var hasUncategorized = false
+        for (path in poolClips) {
+            val c = VideoFileOps.categoryOf(path)
+            if (c == null) hasUncategorized = true else present.add(c)
+        }
+
+        val known = CategoryStore.ALL.associateBy { it.code }
+        val entries = present.map { code -> code to (known[code]?.name ?: code) }
+        for ((code, label) in entries) {
+            addFilterChip(group, code, label)
+        }
+        if (hasUncategorized && entries.isNotEmpty()) {
+            addFilterChip(group, CategoryStore.UNCATEGORIZED, getString(R.string.category_none))
+        }
+        cb.categoryFilterScroll.visibility = if (group.childCount > 0) View.VISIBLE else View.GONE
+        // Limpia del filtro los codes que ya no estan presentes.
+        categoryFilter.retainAll(entries.map { it.first }.toSet() + CategoryStore.UNCATEGORIZED)
+    }
+
+    private fun addFilterChip(
+        group: com.google.android.material.chip.ChipGroup,
+        code: String,
+        label: String
+    ) {
+        val chip = layoutInflater.inflate(R.layout.chip_category_filter, group, false)
+                as com.google.android.material.chip.Chip
+        chip.text = label
+        chip.tag = code
+        chip.isChecked = code in categoryFilter
+        group.addView(chip)
     }
 
     private fun setAutoRotate(enabled: Boolean) {
@@ -518,6 +587,9 @@ class MainActivity : AppCompatActivity() {
             }
             panel.root.setOnDragListener { view, event -> onPanelDragEvent(index, view, event) }
             panel.btnFavorite.setOnClickListener { favoritePanelVideo(index) }
+            panel.btnCatAn.setOnClickListener { toggleCategory(index, "an") }
+            panel.btnCatTt.setOnClickListener { toggleCategory(index, "tt") }
+            panel.btnCatCs.setOnClickListener { toggleCategory(index, "cs") }
         }
     }
 
@@ -671,12 +743,14 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /** La estrella de Favoritos vive siempre visible en cada panel activo. */
+    /** La estrella de Favoritos y los 3 botones de categoria viven siempre visibles en cada panel activo. */
     private fun updateFavoriteButtons() {
         for (i in 0 until MAX_PANELS) {
             val btn = panels[i].btnFavorite
+            val catRow = panels[i].categoryButtons
             if (i >= activePanelCount) {
                 btn.visibility = View.GONE
+                catRow.visibility = View.GONE
                 continue
             }
             val path = prefs.getString(uriKey(i), null)?.let { Uri.parse(it).path }
@@ -689,7 +763,20 @@ class MainActivity : AppCompatActivity() {
                 getColor(if (fav) R.color.brand_violet else R.color.text_primary)
             )
             btn.alpha = if (fav) 1f else 0.5f
+
+            val cat = path?.let { VideoFileOps.categoryOf(it) }
+            catRow.visibility = View.VISIBLE
+            styleCategoryButton(panels[i].btnCatAn, cat == "an")
+            styleCategoryButton(panels[i].btnCatTt, cat == "tt")
+            styleCategoryButton(panels[i].btnCatCs, cat == "cs")
         }
+    }
+
+    private fun styleCategoryButton(view: android.widget.TextView, active: Boolean) {
+        view.setBackgroundResource(
+            if (active) R.drawable.play_fab_bg else R.drawable.circle_btn_bg
+        )
+        view.alpha = if (active) 1f else 0.5f
     }
 
     private fun favoritePanelVideo(index: Int) {
@@ -716,7 +803,7 @@ class MainActivity : AppCompatActivity() {
             return
         }
         VideoFileOps.updateReferences(this, path, newFile)
-        poolClips = poolClips.filterNot { it == path }
+        setPoolClips(poolClips.filterNot { it == path })
         panels[index].labelFilename.text = newFile.name
         Toast.makeText(
             this,
@@ -725,6 +812,115 @@ class MainActivity : AppCompatActivity() {
         ).show()
         updateFavoriteButtons()
         flashPanelFeedback()
+    }
+
+    // ----- Categorias -----
+
+    private fun ensureOrganizeAccess(): Boolean {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R &&
+            !Environment.isExternalStorageManager()
+        ) {
+            Toast.makeText(this, R.string.storage_needed_for_org, Toast.LENGTH_LONG).show()
+            return false
+        }
+        return true
+    }
+
+    /**
+     * Boton de categoria: si el clip ya esta en `code` lo saca (vuelve a /Favoritos);
+     * si no, lo mueve a /Favoritos/<code>. Toggle simple, como la estrella.
+     */
+    private fun toggleCategory(index: Int, code: String) {
+        if (index !in 0 until activePanelCount) return
+        if (!ensureOrganizeAccess()) return
+        val path = prefs.getString(uriKey(index), null)?.let { Uri.parse(it).path } ?: return
+        val already = VideoFileOps.categoryOf(path) == code
+        val newFile = if (already) {
+            VideoFileOps.removeFromCategory(this, path)
+        } else {
+            VideoFileOps.moveToCategory(this, path, code)
+        }
+        if (newFile == null) {
+            Toast.makeText(this, R.string.categorize_failed, Toast.LENGTH_SHORT).show()
+            return
+        }
+        VideoFileOps.updateReferences(this, path, newFile)
+        val underPool = poolFolder?.let {
+            newFile.absolutePath.startsWith(File(it).absolutePath + File.separator)
+        } == true
+        val newList = if (underPool) {
+            poolClips.map { if (it == path) newFile.absolutePath else it }
+        } else {
+            poolClips.filterNot { it == path }
+        }
+        setPoolClips(newList)
+        panels[index].labelFilename.text = newFile.name
+        Toast.makeText(
+            this,
+            if (already) getString(R.string.category_removed_toast)
+            else getString(R.string.categorized_toast, code),
+            Toast.LENGTH_SHORT
+        ).show()
+        updateFavoriteButtons()
+        syncControls()
+        flashPanelFeedback()
+    }
+
+    /** selected vacio = sin filtro (todas las categorias). */
+    private fun applyCategoryFilter(selected: Set<String>) {
+        val candidate = if (selected.isEmpty()) {
+            poolClips
+        } else {
+            poolClips.filter {
+                (VideoFileOps.categoryOf(it) ?: CategoryStore.UNCATEGORIZED) in selected
+            }
+        }
+        if (selected.isNotEmpty() && candidate.isEmpty()) {
+            Toast.makeText(this, R.string.category_empty_pool, Toast.LENGTH_SHORT).show()
+            syncControls()
+            return
+        }
+        categoryFilter = selected.toMutableSet()
+        activeClips = candidate.ifEmpty { poolClips }
+        refillBag()
+        val allowed = activeClips.toHashSet()
+        for (i in 0 until activePanelCount) {
+            if (heldPanels[i]) continue
+            val p = prefs.getString(uriKey(i), null)?.let { Uri.parse(it).path } ?: continue
+            if (p !in allowed) swapPanelToRandomClip(i)
+        }
+        revealOverlayUi()
+    }
+
+    private fun rescanPool() {
+        val folder = poolFolder ?: return
+        Thread {
+            val clips = MediaPool.scan(folder)
+            runOnUiThread {
+                setPoolClips(clips)
+                updateFavoriteButtons()
+                syncControls()
+            }
+        }.start()
+    }
+
+    private fun showPoolByCategoryDialog() {
+        val cats = CategoryStore.ALL
+        val labels = cats.map { "${it.name}  ·  ${it.short}" }.toTypedArray()
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.pool_by_category)
+            .setItems(labels) { _, which ->
+                if (!ensureOrganizeAccess()) return@setItems
+                val dir = VideoFileOps.categoryDir(cats[which].code)
+                if (!dir.isDirectory || dir.listFiles()?.any { it.isFile } != true) {
+                    Toast.makeText(this, R.string.category_empty_pool, Toast.LENGTH_SHORT).show()
+                    return@setItems
+                }
+                categoryFilter.clear()
+                enterPoolMode(dir.absolutePath)
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
     }
 
     private fun animationsEnabled(): Boolean = try {
@@ -939,6 +1135,7 @@ class MainActivity : AppCompatActivity() {
         binding.controlBar.root.visibility = View.GONE
         for (i in 0 until MAX_PANELS) {
             panels[i].btnFavorite.visibility = View.GONE
+            panels[i].categoryButtons.visibility = View.GONE
         }
     }
 
@@ -1158,12 +1355,12 @@ class MainActivity : AppCompatActivity() {
         val folder = poolFolder ?: return
         val cached = MediaPool.cachedFor(folder)
         if (cached.isNotEmpty()) {
-            poolClips = cached
+            setPoolClips(cached)
             return
         }
         Thread {
             val clips = MediaPool.scan(folder)
-            runOnUiThread { poolClips = clips }
+            runOnUiThread { setPoolClips(clips) }
         }.start()
     }
 
@@ -1284,6 +1481,7 @@ class MainActivity : AppCompatActivity() {
     private fun enterPoolMode(folder: String) {
         appMode = MODE_POOL
         poolFolder = folder
+        categoryFilter.clear()
         prefs.edit()
             .putString(MODE_KEY, MODE_POOL)
             .putString(POOL_FOLDER_KEY, folder)
@@ -1292,7 +1490,7 @@ class MainActivity : AppCompatActivity() {
         Thread {
             val clips = MediaPool.scan(folder)
             runOnUiThread {
-                poolClips = clips
+                setPoolClips(clips)
                 if (clips.size < MIN_PANELS) {
                     Toast.makeText(this, R.string.pool_too_few, Toast.LENGTH_LONG).show()
                     return@runOnUiThread
@@ -1308,8 +1506,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startPoolPlayback() {
-        val count = poolClips.size.coerceIn(MIN_PANELS, MAX_PANELS)
-        val picks = poolClips.shuffled().take(count)
+        val count = activeClips.size.coerceIn(MIN_PANELS, MAX_PANELS)
+        val picks = activeClips.shuffled().take(count)
+        // Los clips iniciales tambien cuentan como "vistos" en el ciclo de la bolsa.
+        poolBag.removeAll(picks.toSet())
 
         val editor = prefs.edit()
         editor.putInt(PANEL_COUNT_KEY, count)
@@ -1347,10 +1547,57 @@ class MainActivity : AppCompatActivity() {
             .mapNotNull { prefs.getString(uriKey(it), null)?.let { u -> Uri.parse(u).path } }
             .toSet()
 
+    /** Asigna la lista de clips y rebaraja la bolsa. Unico punto de entrada para tocar poolClips. */
+    private fun setPoolClips(clips: List<String>) {
+        poolClips = clips
+        poolClipsSet = clips.toHashSet()
+        poolFolder?.let { MediaPool.replaceCached(it, clips) }
+        recomputeActiveClips()
+        refillBag()
+    }
+
+    /** Recalcula activeClips segun el filtro de categorias vigente. */
+    private fun recomputeActiveClips() {
+        activeClips = if (categoryFilter.isEmpty()) {
+            poolClips
+        } else {
+            poolClips.filter {
+                (VideoFileOps.categoryOf(it) ?: CategoryStore.UNCATEGORIZED) in categoryFilter
+            }
+        }
+        if (activeClips.isEmpty()) activeClips = poolClips
+    }
+
+    private fun refillBag() {
+        poolBag = activeClips.shuffled().toMutableList()
+    }
+
+    /**
+     * Siguiente clip: sale de la bolsa barajada, asi cada video aparece una vez antes
+     * de repetirse ninguno. Se saltan (y se re-encolan en un lugar al azar) los que
+     * estan ahora en pantalla; las entradas viejas tras favoritear se descartan.
+     */
     private fun randomClipExcluding(exclude: Set<String>): String? {
-        if (poolClips.isEmpty()) return null
-        val available = poolClips.filterNot { it in exclude }
-        return (if (available.isNotEmpty()) available else poolClips).random()
+        if (activeClips.isEmpty()) return null
+        if (activeClips.size <= exclude.size + 1) {
+            val available = activeClips.filterNot { it in exclude }
+            return (if (available.isNotEmpty()) available else activeClips).random()
+        }
+        val skipped = ArrayList<String>()
+        var pick: String? = null
+        var guard = 0
+        while (guard++ < activeClips.size * 2) {
+            if (poolBag.isEmpty()) refillBag()
+            val candidate = poolBag.removeAt(poolBag.size - 1)
+            if (candidate !in poolClipsSet) continue
+            if (candidate in exclude) { skipped.add(candidate); continue }
+            pick = candidate
+            break
+        }
+        for (s in skipped) poolBag.add((0..poolBag.size).random(), s)
+        return pick
+            ?: activeClips.filterNot { it in exclude }.randomOrNull()
+            ?: activeClips.random()
     }
 
     private fun swapPanelToRandomClip(index: Int) {
