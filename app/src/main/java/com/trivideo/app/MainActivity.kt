@@ -47,6 +47,7 @@ import androidx.media3.common.VideoSize
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.trivideo.app.databinding.ActivityMainBinding
 import com.trivideo.app.databinding.PanelCellBinding
@@ -587,11 +588,7 @@ class MainActivity : AppCompatActivity() {
             }
             panel.root.setOnDragListener { view, event -> onPanelDragEvent(index, view, event) }
             panel.btnFavorite.setOnClickListener { favoritePanelVideo(index) }
-            panel.btnCatAn.setOnClickListener { toggleCategory(index, "an") }
-            panel.btnCatTt.setOnClickListener { toggleCategory(index, "tt") }
-            panel.btnCatCs.setOnClickListener { toggleCategory(index, "cs") }
-            panel.btnCatCu.setOnClickListener { toggleCategory(index, "cu") }
-            panel.btnCatOr.setOnClickListener { toggleCategory(index, "or") }
+            panel.btnCategorize.setOnClickListener { showCategorizeSheet(index) }
         }
     }
 
@@ -745,14 +742,14 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /** La estrella de Favoritos y los 3 botones de categoria viven siempre visibles en cada panel activo. */
+    /** La estrella de Favoritos y el boton de clasificar viven siempre visibles en cada panel activo. */
     private fun updateFavoriteButtons() {
         for (i in 0 until MAX_PANELS) {
             val btn = panels[i].btnFavorite
-            val catRow = panels[i].categoryButtons
+            val tag = panels[i].btnCategorize
             if (i >= activePanelCount) {
                 btn.visibility = View.GONE
-                catRow.visibility = View.GONE
+                tag.visibility = View.GONE
                 continue
             }
             val path = prefs.getString(uriKey(i), null)?.let { Uri.parse(it).path }
@@ -767,20 +764,12 @@ class MainActivity : AppCompatActivity() {
             btn.alpha = if (fav) 1f else 0.5f
 
             val cat = path?.let { VideoFileOps.categoryOf(it) }
-            catRow.visibility = View.VISIBLE
-            styleCategoryButton(panels[i].btnCatAn, cat == "an")
-            styleCategoryButton(panels[i].btnCatTt, cat == "tt")
-            styleCategoryButton(panels[i].btnCatCs, cat == "cs")
-            styleCategoryButton(panels[i].btnCatCu, cat == "cu")
-            styleCategoryButton(panels[i].btnCatOr, cat == "or")
+            tag.visibility = View.VISIBLE
+            tag.setColorFilter(
+                getColor(if (cat != null) R.color.brand_violet else R.color.text_primary)
+            )
+            tag.alpha = if (cat != null) 1f else 0.5f
         }
-    }
-
-    private fun styleCategoryButton(view: android.widget.TextView, active: Boolean) {
-        view.setBackgroundResource(
-            if (active) R.drawable.play_fab_bg else R.drawable.circle_btn_bg
-        )
-        view.alpha = if (active) 1f else 0.5f
     }
 
     private fun favoritePanelVideo(index: Int) {
@@ -844,16 +833,46 @@ class MainActivity : AppCompatActivity() {
         return catDir == null || catDir == rootPath
     }
 
-    /**
-     * Boton de categoria: si el clip ya esta en `code` lo saca (vuelve a /Favoritos);
-     * si no, lo mueve a /Favoritos/<code>. Toggle simple, como la estrella.
-     */
-    private fun toggleCategory(index: Int, code: String) {
+    /** Mini-selector de categoria para un panel. Ventana aparte: no dispara gestos del panel. */
+    private fun showCategorizeSheet(index: Int) {
         if (index !in 0 until activePanelCount) return
         if (!ensureOrganizeAccess()) return
         val path = prefs.getString(uriKey(index), null)?.let { Uri.parse(it).path } ?: return
-        val already = VideoFileOps.categoryOf(path) == code
-        val newFile = if (already) {
+        val current = VideoFileOps.categoryOf(path)
+
+        val sheet = BottomSheetDialog(this)
+        val view = layoutInflater.inflate(R.layout.sheet_categorize, null)
+        val chips = view.findViewById<com.google.android.material.chip.ChipGroup>(R.id.sheetCategoryChips)
+        view.findViewById<android.widget.TextView>(R.id.sheetFilename).text = File(path).name
+
+        fun addChip(code: String?, label: String) {
+            val chip = layoutInflater.inflate(R.layout.chip_category_filter, chips, false)
+                    as com.google.android.material.chip.Chip
+            chip.text = label
+            chip.isChecked = code == current
+            chip.setOnClickListener {
+                sheet.dismiss()
+                setPanelCategory(index, code)
+            }
+            chips.addView(chip)
+        }
+        for (c in CategoryStore.ALL) addChip(c.code, c.name)
+        addChip(null, getString(R.string.category_none))
+
+        sheet.setContentView(view)
+        sheet.show()
+    }
+
+    /** Aplica (o quita, si code == null) la categoria al clip del panel. */
+    private fun setPanelCategory(index: Int, code: String?) {
+        if (index !in 0 until activePanelCount) return
+        if (!ensureOrganizeAccess()) return
+        val path = prefs.getString(uriKey(index), null)?.let { Uri.parse(it).path } ?: return
+        if (VideoFileOps.categoryOf(path) == code) {
+            flashPanelFeedback()
+            return
+        }
+        val newFile = if (code == null) {
             VideoFileOps.removeFromCategory(this, path)
         } else {
             VideoFileOps.moveToCategory(this, path, code)
@@ -870,7 +889,7 @@ class MainActivity : AppCompatActivity() {
         panels[index].labelFilename.text = newFile.name
         Toast.makeText(
             this,
-            if (already) getString(R.string.category_removed_toast)
+            if (code == null) getString(R.string.category_removed_toast)
             else getString(R.string.categorized_toast, code),
             Toast.LENGTH_SHORT
         ).show()
@@ -1152,7 +1171,7 @@ class MainActivity : AppCompatActivity() {
         binding.controlBar.root.visibility = View.GONE
         for (i in 0 until MAX_PANELS) {
             panels[i].btnFavorite.visibility = View.GONE
-            panels[i].categoryButtons.visibility = View.GONE
+            panels[i].btnCategorize.visibility = View.GONE
         }
     }
 
