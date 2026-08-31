@@ -84,6 +84,8 @@ class MainActivity : AppCompatActivity() {
     private var activeClips: List<String> = emptyList()
     /** Codes de categoria activos en el filtro del pool; vacio = sin filtro (todas). */
     private var categoryFilter: MutableSet<String> = mutableSetOf()
+    /** El selector de carpeta abierto es para entrar a modo clasificador (no a pool). */
+    private var pendingClassifyFolder: Boolean = false
     /** Bolsa de barajado: clips que faltan reproducir en el ciclo actual (se saca del final). */
     private var poolBag: MutableList<String> = mutableListOf()
     private val heldPanels = BooleanArray(MAX_PANELS)
@@ -143,9 +145,15 @@ class MainActivity : AppCompatActivity() {
             }
             if (folder != null) {
                 replaceTargetIndex = -1
-                enterPoolMode(folder)
+                if (pendingClassifyFolder) {
+                    pendingClassifyFolder = false
+                    enterClassifyMode(folder)
+                } else {
+                    enterPoolMode(folder)
+                }
                 return@registerForActivityResult
             }
+            pendingClassifyFolder = false
 
             val paths = if (result.resultCode == RESULT_OK) {
                 result.data?.getStringArrayListExtra(VideoPickerActivity.EXTRA_SELECTED_PATHS)
@@ -241,6 +249,10 @@ class MainActivity : AppCompatActivity() {
     private fun setupEmptyState() {
         binding.emptyState.btnPickVideos.setOnClickListener { launchPickerForAll() }
         binding.emptyState.btnRandomFolder.setOnClickListener { launchFolderPicker() }
+        binding.emptyState.btnClassifyFolder.setOnClickListener {
+            if (hasStorageAccess()) pendingClassifyFolder = true
+            launchFolderPicker()
+        }
     }
 
     private fun setupControlBar() {
@@ -276,7 +288,11 @@ class MainActivity : AppCompatActivity() {
 
         cb.modeToggle.addOnButtonCheckedListener { _, checkedId, isChecked ->
             if (syncingControls || !isChecked) return@addOnButtonCheckedListener
-            if (checkedId == R.id.btnModePool) switchToPoolMode() else switchToFixedMode()
+            when (checkedId) {
+                R.id.btnModePool -> switchToPoolMode()
+                R.id.btnModeClassify -> switchToClassifyMode()
+                else -> switchToFixedMode()
+            }
         }
 
         cb.speedChips.setOnCheckedStateChangeListener { _, checkedIds ->
@@ -384,7 +400,13 @@ class MainActivity : AppCompatActivity() {
         val cb = binding.controlBar
         syncingControls = true
 
-        cb.modeToggle.check(if (appMode == MODE_POOL) R.id.btnModePool else R.id.btnModeFixed)
+        cb.modeToggle.check(
+            when (appMode) {
+                MODE_POOL -> R.id.btnModePool
+                MODE_CLASSIFY -> R.id.btnModeClassify
+                else -> R.id.btnModeFixed
+            }
+        )
 
         cb.speedChips.check(
             when (speedIndex) {
@@ -500,6 +522,7 @@ class MainActivity : AppCompatActivity() {
             syncControls()
             return
         }
+        val fromClassify = appMode == MODE_CLASSIFY
         appMode = MODE_POOL
         prefs.edit().putString(MODE_KEY, MODE_POOL).apply()
         for (i in 0 until activePanelCount) {
@@ -510,13 +533,35 @@ class MainActivity : AppCompatActivity() {
         if (autoRotateEnabled) {
             uiHandler.postDelayed(autoRotateRunnable, autoRotateIntervalSec * 1000L)
         }
-        Toast.makeText(this, R.string.mode_pool_toast, Toast.LENGTH_SHORT).show()
+        updateFavoriteButtons()
+        if (!fromClassify) Toast.makeText(this, R.string.mode_pool_toast, Toast.LENGTH_SHORT).show()
         revealOverlayUi()
     }
 
     private fun switchToFixedMode() {
         if (appMode == MODE_FIXED) return
+        if (appMode == MODE_CLASSIFY) {
+            // Clasificador -> fijo: congela los 2 clips actuales en loop.
+            appMode = MODE_FIXED
+            prefs.edit().putString(MODE_KEY, MODE_FIXED).apply()
+            for (i in 0 until activePanelCount) players[i]?.setRepeatMode(Player.REPEAT_MODE_ALL)
+            updateFavoriteButtons()
+            revealOverlayUi()
+            return
+        }
         pinCurrentAsFixed()
+    }
+
+    private fun switchToClassifyMode() {
+        if (appMode == MODE_CLASSIFY) return
+        val folder = poolFolder
+        if (folder == null) {
+            if (hasStorageAccess()) pendingClassifyFolder = true
+            launchFolderPicker()
+            syncControls()
+            return
+        }
+        enterClassifyMode(folder)
     }
 
     private fun setupPanels() {
@@ -526,7 +571,7 @@ class MainActivity : AppCompatActivity() {
                 override fun onDown(e: MotionEvent): Boolean = true
 
                 override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
-                    if (appMode == MODE_POOL) {
+                    if (isPoolLike()) {
                         if (index < activePanelCount && heldPanels[index]) {
                             Toast.makeText(
                                 this@MainActivity,
@@ -544,6 +589,7 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 override fun onDoubleTap(e: MotionEvent): Boolean {
+                    if (appMode == MODE_CLASSIFY) return true
                     if (!hasStorageAccess()) {
                         requestStorageAccess()
                         return true
@@ -558,10 +604,10 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 override fun onLongPress(e: MotionEvent) {
-                    if (appMode == MODE_POOL) {
-                        toggleHold(index)
-                    } else {
-                        startPanelDrag(index)
+                    when (appMode) {
+                        MODE_POOL -> toggleHold(index)
+                        MODE_FIXED -> startPanelDrag(index)
+                        // Clasificador: sin long-press.
                     }
                 }
 
@@ -589,6 +635,11 @@ class MainActivity : AppCompatActivity() {
             panel.root.setOnDragListener { view, event -> onPanelDragEvent(index, view, event) }
             panel.btnFavorite.setOnClickListener { favoritePanelVideo(index) }
             panel.btnCategorize.setOnClickListener { showCategorizeSheet(index) }
+            panel.btnCatAn.setOnClickListener { setPanelCategory(index, "an") }
+            panel.btnCatTt.setOnClickListener { setPanelCategory(index, "tt") }
+            panel.btnCatCs.setOnClickListener { setPanelCategory(index, "cs") }
+            panel.btnCatCu.setOnClickListener { setPanelCategory(index, "cu") }
+            panel.btnCatOr.setOnClickListener { setPanelCategory(index, "or") }
         }
     }
 
@@ -742,14 +793,20 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /** La estrella de Favoritos y el boton de clasificar viven siempre visibles en cada panel activo. */
+    /**
+     * Estrella + chrome de clasificar en cada panel activo. En modo clasificador se
+     * ven los 5 botones directos (`categoryButtons`); en el resto, el boton de tag.
+     */
     private fun updateFavoriteButtons() {
+        val classify = appMode == MODE_CLASSIFY
         for (i in 0 until MAX_PANELS) {
             val btn = panels[i].btnFavorite
             val tag = panels[i].btnCategorize
+            val row = panels[i].categoryButtons
             if (i >= activePanelCount) {
                 btn.visibility = View.GONE
                 tag.visibility = View.GONE
+                row.visibility = View.GONE
                 continue
             }
             val path = prefs.getString(uriKey(i), null)?.let { Uri.parse(it).path }
@@ -764,12 +821,28 @@ class MainActivity : AppCompatActivity() {
             btn.alpha = if (fav) 1f else 0.5f
 
             val cat = path?.let { VideoFileOps.categoryOf(it) }
-            tag.visibility = View.VISIBLE
+            tag.visibility = if (classify) View.GONE else View.VISIBLE
             tag.setColorFilter(
                 getColor(if (cat != null) R.color.brand_violet else R.color.text_primary)
             )
             tag.alpha = if (cat != null) 1f else 0.5f
+
+            row.visibility = if (classify) View.VISIBLE else View.GONE
+            if (classify) {
+                styleCategoryButton(panels[i].btnCatAn, cat == "an")
+                styleCategoryButton(panels[i].btnCatTt, cat == "tt")
+                styleCategoryButton(panels[i].btnCatCs, cat == "cs")
+                styleCategoryButton(panels[i].btnCatCu, cat == "cu")
+                styleCategoryButton(panels[i].btnCatOr, cat == "or")
+            }
         }
+    }
+
+    private fun styleCategoryButton(view: android.widget.TextView, active: Boolean) {
+        view.setBackgroundResource(
+            if (active) R.drawable.play_fab_bg else R.drawable.circle_btn_bg
+        )
+        view.alpha = if (active) 1f else 0.5f
     }
 
     private fun favoritePanelVideo(index: Int) {
@@ -782,11 +855,18 @@ class MainActivity : AppCompatActivity() {
         }
         val path = prefs.getString(uriKey(index), null)?.let { Uri.parse(it).path } ?: return
         if (VideoFileOps.isInFavorites(path)) {
-            Toast.makeText(
-                this,
-                getString(R.string.favorite_already, VideoFileOps.FAVORITES_DIR_NAME),
-                Toast.LENGTH_SHORT
-            ).show()
+            // Ya esta en /Favoritos raiz. En clasificador cuenta como "archivado": lo
+            // sacamos del pool de la sesion y pasamos al siguiente.
+            if (appMode == MODE_CLASSIFY) {
+                setPoolClips(poolClips.filterNot { it == path })
+                if (!heldPanels[index]) swapPanelToRandomClip(index)
+            } else {
+                Toast.makeText(
+                    this,
+                    getString(R.string.favorite_already, VideoFileOps.FAVORITES_DIR_NAME),
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
             flashPanelFeedback()
             return
         }
@@ -796,7 +876,7 @@ class MainActivity : AppCompatActivity() {
             return
         }
         VideoFileOps.updateReferences(this, path, newFile)
-        setPoolClips(poolClips.filterNot { it == path })
+        setPoolClips(poolClips.filterNot { it == path || it == newFile.absolutePath })
         panels[index].labelFilename.text = newFile.name
         Toast.makeText(
             this,
@@ -804,6 +884,7 @@ class MainActivity : AppCompatActivity() {
             Toast.LENGTH_SHORT
         ).show()
         updateFavoriteButtons()
+        if (appMode == MODE_CLASSIFY && !heldPanels[index]) swapPanelToRandomClip(index)
         flashPanelFeedback()
     }
 
@@ -896,7 +977,7 @@ class MainActivity : AppCompatActivity() {
         updateFavoriteButtons()
         syncControls()
         // Si el clip dejo el pool (flujo de limpieza), el panel avanza al siguiente.
-        if (!belongs && appMode == MODE_POOL && !heldPanels[index]) {
+        if (!belongs && isPoolLike() && !heldPanels[index]) {
             swapPanelToRandomClip(index)
         }
         flashPanelFeedback()
@@ -1172,6 +1253,7 @@ class MainActivity : AppCompatActivity() {
         for (i in 0 until MAX_PANELS) {
             panels[i].btnFavorite.visibility = View.GONE
             panels[i].btnCategorize.visibility = View.GONE
+            panels[i].categoryButtons.visibility = View.GONE
         }
     }
 
@@ -1374,10 +1456,10 @@ class MainActivity : AppCompatActivity() {
         if (hasAnyVideo(savedUris)) {
             showPlayersUi()
             loadUrisIntoPlayers(savedUris)
-            if (appMode == MODE_POOL) {
+            if (isPoolLike()) {
                 restorePoolIfNeeded()
                 applyHeldRepeatModes()
-                if (autoRotateEnabled) {
+                if (autoRotateEnabled && appMode == MODE_POOL) {
                     uiHandler.postDelayed(autoRotateRunnable, autoRotateIntervalSec * 1000L)
                 }
             }
@@ -1541,8 +1623,35 @@ class MainActivity : AppCompatActivity() {
         }.start()
     }
 
-    private fun startPoolPlayback() {
-        val count = activeClips.size.coerceIn(MIN_PANELS, MAX_PANELS)
+    /** Modo clasificador: recorre la carpeta con la bolsa (sin repetir), 2 videos, botones directos. */
+    private fun enterClassifyMode(folder: String) {
+        appMode = MODE_CLASSIFY
+        poolFolder = folder
+        categoryFilter.clear()
+        autoRotateEnabled = false
+        prefs.edit()
+            .putString(MODE_KEY, MODE_CLASSIFY)
+            .putString(POOL_FOLDER_KEY, folder)
+            .putBoolean(AUTO_ROTATE_KEY, false)
+            .apply()
+        uiHandler.removeCallbacks(autoRotateRunnable)
+        Toast.makeText(this, R.string.scanning_folder, Toast.LENGTH_SHORT).show()
+        Thread {
+            val clips = MediaPool.scan(folder)
+            runOnUiThread {
+                setPoolClips(clips)
+                if (clips.size < 2) {
+                    Toast.makeText(this, R.string.pool_too_few, Toast.LENGTH_LONG).show()
+                    return@runOnUiThread
+                }
+                startPoolPlayback(forceCount = 2)
+                Toast.makeText(this, R.string.mode_classify_toast, Toast.LENGTH_SHORT).show()
+            }
+        }.start()
+    }
+
+    private fun startPoolPlayback(forceCount: Int? = null) {
+        val count = forceCount ?: activeClips.size.coerceIn(MIN_PANELS, MAX_PANELS)
         val picks = activeClips.shuffled().take(count)
         // Los clips iniciales tambien cuentan como "vistos" en el ciclo de la bolsa.
         poolBag.removeAll(picks.toSet())
@@ -1582,6 +1691,9 @@ class MainActivity : AppCompatActivity() {
         (0 until activePanelCount)
             .mapNotNull { prefs.getString(uriKey(it), null)?.let { u -> Uri.parse(u).path } }
             .toSet()
+
+    /** Pool y clasificador comparten toda la maquinaria de bolsa/aleatorio. */
+    private fun isPoolLike(): Boolean = appMode == MODE_POOL || appMode == MODE_CLASSIFY
 
     /** Asigna la lista de clips y rebaraja la bolsa. Unico punto de entrada para tocar poolClips. */
     private fun setPoolClips(clips: List<String>) {
@@ -1637,11 +1749,16 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun swapPanelToRandomClip(index: Int) {
-        if (appMode != MODE_POOL) return
+        if (!isPoolLike()) return
         if (index !in 0 until activePanelCount) return
         if (heldPanels[index]) return
         val player = players[index] ?: return
-        val next = randomClipExcluding(currentlyShownPaths()) ?: return
+        val next = randomClipExcluding(currentlyShownPaths()) ?: run {
+            if (appMode == MODE_CLASSIFY) {
+                Toast.makeText(this, R.string.classify_done_toast, Toast.LENGTH_SHORT).show()
+            }
+            return
+        }
         val uri = Uri.fromFile(File(next))
         prefs.edit()
             .putString(uriKey(index), uri.toString())
@@ -1790,6 +1907,7 @@ class MainActivity : AppCompatActivity() {
         private const val MODE_KEY = "mode"
         private const val MODE_FIXED = "fixed"
         private const val MODE_POOL = "pool"
+        private const val MODE_CLASSIFY = "classify"
         private const val POOL_FOLDER_KEY = "pool_folder"
         private const val SPEED_INDEX_KEY = "speed_index"
         private const val LAYOUT_MODE_KEY = "layout_mode"

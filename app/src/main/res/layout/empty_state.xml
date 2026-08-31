@@ -43,6 +43,13 @@
             android:layout_marginTop="8dp"
             android:text="@string/random_folder_button" />
 
+        <Button
+            android:id="@+id/btnClassifyFolder"
+            style="?android:attr/buttonStyleSmall"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/mode_classify_label" />
+
     </LinearLayout>
 
 </FrameLayout>

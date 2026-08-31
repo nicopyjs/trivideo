@@ -125,9 +125,14 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
+                android:paddingStart="4dp"
+                android:paddingEnd="4dp"
+                android:insetLeft="0dp"
+                android:insetRight="0dp"
                 android:text="@string/mode_pool_label"
                 app:icon="@drawable/ic_shuffle_24"
-                app:iconGravity="textStart" />
+                app:iconGravity="top"
+                app:iconPadding="2dp" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnModeFixed"
@@ -135,9 +140,29 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
+                android:paddingStart="4dp"
+                android:paddingEnd="4dp"
+                android:insetLeft="0dp"
+                android:insetRight="0dp"
                 android:text="@string/mode_fixed_label"
                 app:icon="@drawable/ic_grid_2x2_24"
-                app:iconGravity="textStart" />
+                app:iconGravity="top"
+                app:iconPadding="2dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnModeClassify"
+                style="@style/Widget.TriVideo.ToggleButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:paddingStart="4dp"
+                android:paddingEnd="4dp"
+                android:insetLeft="0dp"
+                android:insetRight="0dp"
+                android:text="@string/mode_classify_label"
+                app:icon="@drawable/ic_classify_24"
+                app:iconGravity="top"
+                app:iconPadding="2dp" />
 
         </com.google.android.material.button.MaterialButtonToggleGroup>
 
