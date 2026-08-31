@@ -73,4 +73,60 @@
         android:contentDescription="@string/favorite_move_action"
         android:visibility="gone" />
 
+    <LinearLayout
+        android:id="@+id/categoryButtons"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|start"
+        android:layout_marginStart="56dp"
+        android:layout_marginBottom="6dp"
+        android:orientation="horizontal"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/btnCatAn"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_marginEnd="4dp"
+            android:background="@drawable/circle_btn_bg"
+            android:foreground="?attr/selectableItemBackgroundBorderless"
+            android:gravity="center"
+            android:textColor="@android:color/white"
+            android:textStyle="bold"
+            android:textSize="12sp"
+            android:alpha="0.5"
+            android:contentDescription="@string/cat_an_desc"
+            android:text="@string/cat_an_short" />
+
+        <TextView
+            android:id="@+id/btnCatTt"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_marginEnd="4dp"
+            android:background="@drawable/circle_btn_bg"
+            android:foreground="?attr/selectableItemBackgroundBorderless"
+            android:gravity="center"
+            android:textColor="@android:color/white"
+            android:textStyle="bold"
+            android:textSize="12sp"
+            android:alpha="0.5"
+            android:contentDescription="@string/cat_tt_desc"
+            android:text="@string/cat_tt_short" />
+
+        <TextView
+            android:id="@+id/btnCatCs"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="@drawable/circle_btn_bg"
+            android:foreground="?attr/selectableItemBackgroundBorderless"
+            android:gravity="center"
+            android:textColor="@android:color/white"
+            android:textStyle="bold"
+            android:textSize="12sp"
+            android:alpha="0.5"
+            android:contentDescription="@string/cat_cs_desc"
+            android:text="@string/cat_cs_short" />
+
+    </LinearLayout>
+
 </FrameLayout>

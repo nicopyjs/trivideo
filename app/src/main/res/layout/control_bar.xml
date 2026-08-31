@@ -141,6 +141,53 @@
 
         </com.google.android.material.button.MaterialButtonToggleGroup>
 
+        <!-- Categorías -->
+        <LinearLayout
+            android:id="@+id/categorySection"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <TextView
+                style="@style/TextAppearance.Material3.LabelMedium"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:layout_marginBottom="6dp"
+                android:textColor="@color/text_secondary"
+                android:text="@string/section_categories" />
+
+            <HorizontalScrollView
+                android:id="@+id/categoryFilterScroll"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:scrollbars="none"
+                android:overScrollMode="never">
+
+                <com.google.android.material.chip.ChipGroup
+                    android:id="@+id/categoryFilterChips"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    app:singleLine="true"
+                    app:singleSelection="false"
+                    app:chipSpacingHorizontal="8dp" />
+
+            </HorizontalScrollView>
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnPoolCategory"
+                style="@style/Widget.Material3.Button.OutlinedButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:textColor="@color/text_primary"
+                app:icon="@drawable/ic_shuffle_24"
+                app:iconTint="@color/text_primary"
+                app:strokeColor="@color/control_idle_stroke"
+                android:text="@string/pool_by_category" />
+
+        </LinearLayout>
+
         <!-- Velocidad -->
         <TextView
             style="@style/TextAppearance.Material3.LabelMedium"
