@@ -65,6 +65,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var prefs: SharedPreferences
     private lateinit var panels: List<PanelCellBinding>
 
+    /** Botones directos de categoria por panel (modo clasificador): code -> vista. */
+    private val panelCatButtons: Array<LinkedHashMap<String, android.widget.TextView>> =
+        Array(MAX_PANELS) { LinkedHashMap() }
+
     private var players: Array<ExoPlayer?> = arrayOfNulls(MAX_PANELS)
     private var videoAspects: Array<Float?> = arrayOfNulls(MAX_PANELS)
     private var currentGridShape: Pair<Int, Int>? = null
@@ -635,11 +639,43 @@ class MainActivity : AppCompatActivity() {
             panel.root.setOnDragListener { view, event -> onPanelDragEvent(index, view, event) }
             panel.btnFavorite.setOnClickListener { favoritePanelVideo(index) }
             panel.btnCategorize.setOnClickListener { showCategorizeSheet(index) }
-            panel.btnCatAn.setOnClickListener { setPanelCategory(index, "an") }
-            panel.btnCatTt.setOnClickListener { setPanelCategory(index, "tt") }
-            panel.btnCatCs.setOnClickListener { setPanelCategory(index, "cs") }
-            panel.btnCatCu.setOnClickListener { setPanelCategory(index, "cu") }
-            panel.btnCatOr.setOnClickListener { setPanelCategory(index, "or") }
+            buildCategoryButtons(index)
+        }
+    }
+
+    /**
+     * Rellena `panel.categoryButtons` con un boton cuadrado por categoria, en filas
+     * de 3. Se arma una sola vez por panel; el estilo activo lo pinta
+     * updateFavoriteButtons() via panelCatButtons.
+     */
+    private fun buildCategoryButtons(index: Int) {
+        val container = panels[index].categoryButtons
+        container.removeAllViews()
+        panelCatButtons[index].clear()
+        val perRow = 3
+        var row: LinearLayout? = null
+        CategoryStore.ALL.forEachIndexed { i, category ->
+            if (i % perRow == 0) {
+                row = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    layoutParams = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.WRAP_CONTENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                    ).apply { topMargin = if (i == 0) 0 else dp(6f) }
+                }
+                container.addView(row)
+            }
+            val btn = android.widget.TextView(
+                this, null, 0, R.style.CategoryPanelButton
+            ).apply {
+                text = category.short
+                layoutParams = LinearLayout.LayoutParams(dp(52f), dp(52f)).apply {
+                    marginEnd = dp(6f)
+                }
+                setOnClickListener { setPanelCategory(index, category.code) }
+            }
+            row?.addView(btn)
+            panelCatButtons[index][category.code] = btn
         }
     }
 
@@ -795,7 +831,8 @@ class MainActivity : AppCompatActivity() {
 
     /**
      * Estrella + chrome de clasificar en cada panel activo. En modo clasificador se
-     * ven los 5 botones directos (`categoryButtons`); en el resto, el boton de tag.
+     * ve la grilla de botones directos (`categoryButtons`, uno por categoria); en el
+     * resto, el boton de tag.
      */
     private fun updateFavoriteButtons() {
         val classify = appMode == MODE_CLASSIFY
@@ -829,18 +866,16 @@ class MainActivity : AppCompatActivity() {
 
             row.visibility = if (classify) View.VISIBLE else View.GONE
             if (classify) {
-                styleCategoryButton(panels[i].btnCatAn, cat == "an")
-                styleCategoryButton(panels[i].btnCatTt, cat == "tt")
-                styleCategoryButton(panels[i].btnCatCs, cat == "cs")
-                styleCategoryButton(panels[i].btnCatCu, cat == "cu")
-                styleCategoryButton(panels[i].btnCatOr, cat == "or")
+                panelCatButtons[i].forEach { (code, view) ->
+                    styleCategoryButton(view, cat == code)
+                }
             }
         }
     }
 
     private fun styleCategoryButton(view: android.widget.TextView, active: Boolean) {
         view.setBackgroundResource(
-            if (active) R.drawable.play_fab_bg else R.drawable.circle_btn_bg
+            if (active) R.drawable.cat_btn_bg_active else R.drawable.cat_btn_bg
         )
         view.alpha = if (active) 1f else 0.5f
     }

@@ -96,11 +96,6 @@
     <string name="mode_classify_label">Clasificar</string>
     <string name="mode_classify_toast">Clasificador · toca para pasar, botones para archivar</string>
     <string name="classify_done_toast">Terminaste esta carpeta</string>
-    <string name="cat_an_short">AN</string>
-    <string name="cat_tt_short">TT</string>
-    <string name="cat_cs_short">CS</string>
-    <string name="cat_cu_short">CU</string>
-    <string name="cat_or_short">OR</string>
     <string name="layout_auto">Auto</string>
     <string name="layout_one_col">Columna</string>
     <string name="layout_one_row">Fila</string>

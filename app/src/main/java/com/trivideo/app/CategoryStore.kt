@@ -21,6 +21,9 @@ object CategoryStore {
         Category("cs", "CS"),
         Category("cu", "CU"),
         Category("or", "OR"),
+        Category("vg", "VG"),
+        Category("cp", "CP"),
+        Category("tp", "TP"),
     )
 
     fun byCode(code: String?): Category? = ALL.firstOrNull { it.code == code }
