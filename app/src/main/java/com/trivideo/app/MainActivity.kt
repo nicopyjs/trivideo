@@ -92,6 +92,9 @@ class MainActivity : AppCompatActivity() {
     private var pendingClassifyFolder: Boolean = false
     /** Bolsa de barajado: clips que faltan reproducir en el ciclo actual (se saca del final). */
     private var poolBag: MutableList<String> = mutableListOf()
+    /** Modo clasificador: recorrido EN ORDEN (no aleatorio). Lista estable + cursor. */
+    private var classifyOrder: List<String> = emptyList()
+    private var classifyCursor: Int = 0
     private val heldPanels = BooleanArray(MAX_PANELS)
 
     /** Ultima clasificacion/archivo hecho en el clasificador, para el boton Deshacer. */
@@ -1622,6 +1625,7 @@ class MainActivity : AppCompatActivity() {
         val cached = MediaPool.cachedFor(folder)
         if (cached.isNotEmpty()) {
             setPoolClips(cached)
+            if (appMode == MODE_CLASSIFY) ensureClassifyOrder()
             updateClassifyRemaining()
             return
         }
@@ -1629,6 +1633,7 @@ class MainActivity : AppCompatActivity() {
             val clips = MediaPool.scan(folder)
             runOnUiThread {
                 setPoolClips(clips)
+                if (appMode == MODE_CLASSIFY) ensureClassifyOrder()
                 updateClassifyRemaining()
             }
         }.start()
@@ -1802,7 +1807,15 @@ class MainActivity : AppCompatActivity() {
 
     private fun startPoolPlayback(forceCount: Int? = null) {
         val count = forceCount ?: activeClips.size.coerceIn(MIN_PANELS, MAX_PANELS)
-        val picks = activeClips.shuffled().take(count)
+        val picks: List<String>
+        if (appMode == MODE_CLASSIFY) {
+            // Clasificador: recorrido en orden (alfabetico por ruta), sin repetir.
+            classifyOrder = activeClips.sortedBy { it.lowercase() }
+            picks = classifyOrder.take(count)
+            classifyCursor = picks.size
+        } else {
+            picks = activeClips.shuffled().take(count)
+        }
         // Los clips iniciales tambien cuentan como "vistos" en el ciclo de la bolsa.
         poolBag.removeAll(picks.toSet())
 
@@ -1903,13 +1916,47 @@ class MainActivity : AppCompatActivity() {
         if (index !in 0 until activePanelCount) return
         if (heldPanels[index]) return
         if (players[index] == null) return
-        val next = randomClipExcluding(currentlyShownPaths()) ?: run {
-            if (appMode == MODE_CLASSIFY) {
+        val next = if (appMode == MODE_CLASSIFY) {
+            nextClipInOrder(currentlyShownPaths()) ?: run {
                 topToast(R.string.classify_done_toast, Toast.LENGTH_SHORT)
+                return
             }
-            return
+        } else {
+            randomClipExcluding(currentlyShownPaths()) ?: return
         }
         playClipInPanel(index, next)
+    }
+
+    /**
+     * (Re)arma el recorrido en orden del clasificador si hace falta (ej. al volver a
+     * la app con el modo ya activo). El cursor se ubica despues del ultimo clip que
+     * hay en pantalla.
+     */
+    private fun ensureClassifyOrder() {
+        if (classifyOrder.isNotEmpty()) return
+        classifyOrder = activeClips.sortedBy { it.lowercase() }
+        val shown = currentlyShownPaths()
+        classifyCursor = classifyOrder.indexOfLast { it in shown }.let { if (it < 0) 0 else it + 1 }
+    }
+
+    /**
+     * Siguiente clip del clasificador EN ORDEN: recorre `classifyOrder` (lista estable)
+     * desde el cursor, saltando lo ya clasificado/archivado (fuera de `poolClipsSet`) y
+     * lo que ya esta en pantalla. Da una vuelta completa; si no queda nada, null.
+     */
+    private fun nextClipInOrder(exclude: Set<String>): String? {
+        ensureClassifyOrder()
+        val order = classifyOrder
+        if (order.isEmpty()) return null
+        for (step in 0 until order.size) {
+            val idx = (classifyCursor + step) % order.size
+            val path = order[idx]
+            if (path in poolClipsSet && path !in exclude) {
+                classifyCursor = idx + 1
+                return path
+            }
+        }
+        return null
     }
 
     /** Carga un clip concreto en un panel (comparten swap aleatorio y Deshacer). */
