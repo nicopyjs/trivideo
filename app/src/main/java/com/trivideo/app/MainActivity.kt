@@ -644,22 +644,23 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * Rellena `panel.categoryButtons` con un boton cuadrado por categoria, en filas
-     * de 3. Se arma una sola vez por panel; el estilo activo lo pinta
-     * updateFavoriteButtons() via panelCatButtons.
+     * Rellena `panel.categoryButtons` con un boton por categoria repartidos a lo
+     * ancho del panel (filas de [CAT_BUTTONS_PER_ROW], peso 1 c/u para que siempre
+     * entren aunque el panel sea media pantalla). Se arma una sola vez por panel; el
+     * estado activo lo pinta updateFavoriteButtons() via panelCatButtons.
      */
     private fun buildCategoryButtons(index: Int) {
         val container = panels[index].categoryButtons
         container.removeAllViews()
         panelCatButtons[index].clear()
-        val perRow = 3
+        val perRow = CAT_BUTTONS_PER_ROW
         var row: LinearLayout? = null
         CategoryStore.ALL.forEachIndexed { i, category ->
             if (i % perRow == 0) {
                 row = LinearLayout(this).apply {
                     orientation = LinearLayout.HORIZONTAL
                     layoutParams = LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.WRAP_CONTENT,
+                        LinearLayout.LayoutParams.MATCH_PARENT,
                         LinearLayout.LayoutParams.WRAP_CONTENT
                     ).apply { topMargin = if (i == 0) 0 else dp(6f) }
                 }
@@ -668,14 +669,25 @@ class MainActivity : AppCompatActivity() {
             val btn = android.widget.TextView(
                 this, null, 0, R.style.CategoryPanelButton
             ).apply {
-                text = category.short
-                layoutParams = LinearLayout.LayoutParams(dp(52f), dp(52f)).apply {
-                    marginEnd = dp(6f)
+                text = category.label
+                layoutParams = LinearLayout.LayoutParams(0, dp(46f), 1f).apply {
+                    marginStart = dp(3f)
+                    marginEnd = dp(3f)
                 }
                 setOnClickListener { setPanelCategory(index, category.code) }
             }
             row?.addView(btn)
             panelCatButtons[index][category.code] = btn
+        }
+        // Rellena la ultima fila con huecos invisibles para que los botones no se
+        // estiren al doble cuando la categoria count no es multiplo de perRow.
+        val remainder = CategoryStore.ALL.size % perRow
+        if (remainder != 0) {
+            repeat(perRow - remainder) {
+                row?.addView(View(this).apply {
+                    layoutParams = LinearLayout.LayoutParams(0, dp(46f), 1f)
+                })
+            }
         }
     }
 
@@ -877,7 +889,7 @@ class MainActivity : AppCompatActivity() {
         view.setBackgroundResource(
             if (active) R.drawable.cat_btn_bg_active else R.drawable.cat_btn_bg
         )
-        view.alpha = if (active) 1f else 0.5f
+        view.alpha = if (active) 1f else 0.9f
     }
 
     private fun favoritePanelVideo(index: Int) {
@@ -972,7 +984,7 @@ class MainActivity : AppCompatActivity() {
             }
             chips.addView(chip)
         }
-        for (c in CategoryStore.ALL) addChip(c.code, c.name)
+        for (c in CategoryStore.ALL) addChip(c.code, c.label)
         addChip(null, getString(R.string.category_none))
 
         sheet.setContentView(view)
@@ -1058,7 +1070,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun showPoolByCategoryDialog() {
         val cats = CategoryStore.ALL
-        val labels = cats.map { "${it.name}  ·  ${it.short}" }.toTypedArray()
+        val labels = cats.map { "${it.label}  ·  /${it.code}" }.toTypedArray()
         MaterialAlertDialogBuilder(this)
             .setTitle(R.string.pool_by_category)
             .setItems(labels) { _, which ->
@@ -1959,5 +1971,8 @@ class MainActivity : AppCompatActivity() {
         private const val LAYOUT_GRID_2X2 = 3
 
         private const val DEFAULT_ROTATE_INTERVAL = 30
+
+        /** Botones de categoria por fila en el modo clasificador. */
+        private const val CAT_BUTTONS_PER_ROW = 4
     }
 }

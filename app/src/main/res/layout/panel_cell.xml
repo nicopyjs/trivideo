@@ -88,15 +88,17 @@
         android:contentDescription="@string/categorize_action"
         android:visibility="gone" />
 
-    <!-- Botones directos de categoria (grilla de 3 por fila): solo visible en modo
-         clasificador. Las filas y botones se agregan por codigo desde MainActivity. -->
+    <!-- Botones directos de categoria (grilla a lo ancho): solo visible en modo
+         clasificador. Las filas y botones se agregan por codigo desde MainActivity.
+         Va por encima de la estrella (marginBottom despeja sus ~50dp). -->
     <LinearLayout
         android:id="@+id/categoryButtons"
-        android:layout_width="wrap_content"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_gravity="bottom|start"
-        android:layout_marginStart="56dp"
-        android:layout_marginBottom="6dp"
+        android:layout_gravity="bottom"
+        android:layout_marginStart="8dp"
+        android:layout_marginEnd="8dp"
+        android:layout_marginBottom="58dp"
         android:orientation="vertical"
         android:visibility="gone" />
 

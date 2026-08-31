@@ -34,16 +34,18 @@
         <item name="strokeColor">@color/sel_chip_stroke</item>
     </style>
 
-    <!-- Botón cuadrado de categoría en cada panel (modo clasificador). El tamaño
-         (52dp) y el margen se fijan por código en buildCategoryButtons(). -->
+    <!-- Botón de categoría en cada panel (modo clasificador). El alto, el peso y los
+         márgenes se fijan por código en buildCategoryButtons(). -->
     <style name="CategoryPanelButton">
         <item name="android:background">@drawable/cat_btn_bg</item>
         <item name="android:foreground">?attr/selectableItemBackgroundBorderless</item>
         <item name="android:gravity">center</item>
+        <item name="android:maxLines">1</item>
         <item name="android:textColor">@android:color/white</item>
         <item name="android:textStyle">bold</item>
-        <item name="android:textSize">15sp</item>
-        <item name="android:alpha">0.5</item>
+        <item name="android:textSize">13sp</item>
+        <item name="android:letterSpacing">0.02</item>
+        <item name="android:alpha">0.92</item>
         <item name="android:clickable">true</item>
         <item name="android:focusable">true</item>
     </style>

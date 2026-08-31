@@ -3,11 +3,15 @@ package com.trivideo.app
 /**
  * Categorias fijas para clasificar clips. Cada categoria es una subcarpeta de
  * /Favoritos (`/Favoritos/<code>`); clasificar un video = moverlo a esa subcarpeta.
- * Por ahora son 3 y estan hardcodeadas (un boton por categoria en cada panel).
+ *
+ * `code` es el nombre de carpeta en disco (estable, no cambiarlo). `label` es solo
+ * el texto del boton/chip: puede ser mas largo que el code cuando ayuda a leerlo
+ * (ej. `tp` -> "TOP"). Se mantiene corto y neutro porque el repo es publico.
  */
-data class Category(val code: String, val name: String) {
-    /** Etiqueta corta para el boton/badge. */
-    val short: String get() = code.uppercase()
+data class Category(val code: String, val label: String) {
+    /** Alias historico: varios call-sites usaban `short`/`name`. */
+    val short: String get() = label
+    val name: String get() = label
 }
 
 object CategoryStore {
@@ -22,8 +26,8 @@ object CategoryStore {
         Category("cu", "CU"),
         Category("or", "OR"),
         Category("vg", "VG"),
-        Category("cp", "CP"),
-        Category("tp", "TP"),
+        Category("cp", "COMP"),
+        Category("tp", "TOP"),
     )
 
     fun byCode(code: String?): Category? = ALL.firstOrNull { it.code == code }
