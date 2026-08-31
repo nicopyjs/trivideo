@@ -51,6 +51,67 @@
         android:layout_height="wrap_content"
         android:layout_gravity="top" />
 
+    <!-- Contador de pendientes del modo clasificador (arriba a la derecha). -->
+    <TextView
+        android:id="@+id/classifyRemaining"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|end"
+        android:layout_marginTop="10dp"
+        android:layout_marginEnd="10dp"
+        android:background="@drawable/timer_pill_bg"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:paddingTop="4dp"
+        android:paddingBottom="4dp"
+        android:textColor="@android:color/white"
+        android:textSize="12sp"
+        android:textStyle="bold"
+        android:elevation="6dp"
+        android:visibility="gone" />
+
+    <!-- Barra de deshacer del clasificador (arriba, para no tapar los botones). -->
+    <LinearLayout
+        android:id="@+id/classifyUndoBar"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|center_horizontal"
+        android:layout_marginTop="52dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:background="@drawable/label_background"
+        android:paddingStart="16dp"
+        android:paddingEnd="6dp"
+        android:paddingTop="4dp"
+        android:paddingBottom="4dp"
+        android:elevation="8dp"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/classifyUndoText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:textColor="@android:color/white"
+            android:textSize="13sp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnClassifyUndo"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="4dp"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:text="@string/undo" />
+
+    </LinearLayout>
+
     <FrameLayout
         android:id="@+id/gestureHint"
         android:layout_width="match_parent"

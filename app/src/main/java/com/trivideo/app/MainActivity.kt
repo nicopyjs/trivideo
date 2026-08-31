@@ -93,6 +93,17 @@ class MainActivity : AppCompatActivity() {
     /** Bolsa de barajado: clips que faltan reproducir en el ciclo actual (se saca del final). */
     private var poolBag: MutableList<String> = mutableListOf()
     private val heldPanels = BooleanArray(MAX_PANELS)
+
+    /** Ultima clasificacion/archivo hecho en el clasificador, para el boton Deshacer. */
+    private var lastClassifyUndo: ClassifyUndo? = null
+
+    private data class ClassifyUndo(
+        val panelIndex: Int,
+        /** Donde quedo el archivo tras clasificar. */
+        val movedPath: String,
+        /** Carpeta a la que hay que devolverlo. */
+        val originalDir: String,
+    )
     private var speedIndex: Int = DEFAULT_SPEED_INDEX
     private var layoutMode: Int = LAYOUT_AUTO
     private var autoRotateEnabled: Boolean = false
@@ -107,6 +118,15 @@ class MainActivity : AppCompatActivity() {
     private val hideLabelsRunnable = Runnable {
         if (binding.controlBar.root.visibility != View.VISIBLE) {
             setPanelChrome(false)
+        }
+    }
+    private val hideUndoBarRunnable = Runnable { binding.classifyUndoBar.visibility = View.GONE }
+    /** Restaura el badge del panel tras mostrar el salto (±10s): texto RETENIDO y visibilidad segun hold. */
+    private val hideSeekBadge = Array(MAX_PANELS) { i ->
+        Runnable {
+            val badge = panels[i].holdBadge
+            badge.setText(R.string.panel_held_badge)
+            badge.visibility = if (heldPanels[i]) View.VISIBLE else View.GONE
         }
     }
 
@@ -279,6 +299,7 @@ class MainActivity : AppCompatActivity() {
         cb.btnSaveSet.setOnClickListener { saveCurrentAsSet() }
 
         cb.btnPoolCategory.setOnClickListener { showPoolByCategoryDialog() }
+        binding.btnClassifyUndo.setOnClickListener { undoLastClassify() }
         cb.categoryFilterChips.setOnCheckedStateChangeListener { group, _ ->
             if (syncingControls) return@setOnCheckedStateChangeListener
             val selected = buildSet {
@@ -399,6 +420,20 @@ class MainActivity : AppCompatActivity() {
 
     private fun dp(value: Float): Int = (value * resources.displayMetrics.density).toInt()
 
+    /**
+     * Toast anclado arriba: en el modo clasificador los toasts abajo tapaban los
+     * botones de categoria. `setGravity` se respeta porque la app siempre esta en
+     * primer plano.
+     */
+    private fun topToast(msgRes: Int, duration: Int = Toast.LENGTH_SHORT) =
+        topToast(getString(msgRes), duration)
+
+    private fun topToast(msg: CharSequence, duration: Int = Toast.LENGTH_SHORT) {
+        Toast.makeText(this, msg, duration).apply {
+            setGravity(Gravity.TOP or Gravity.CENTER_HORIZONTAL, 0, dp(96f))
+        }.show()
+    }
+
     /** Sincroniza todos los controles del panel con el estado actual, sin disparar sus listeners. */
     private fun syncControls() {
         val cb = binding.controlBar
@@ -505,7 +540,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun setAutoRotate(enabled: Boolean) {
         if (enabled && appMode != MODE_POOL) {
-            Toast.makeText(this, R.string.auto_rotate_only_pool, Toast.LENGTH_SHORT).show()
+            topToast(R.string.auto_rotate_only_pool, Toast.LENGTH_SHORT)
             syncControls()
             return
         }
@@ -538,7 +573,9 @@ class MainActivity : AppCompatActivity() {
             uiHandler.postDelayed(autoRotateRunnable, autoRotateIntervalSec * 1000L)
         }
         updateFavoriteButtons()
-        if (!fromClassify) Toast.makeText(this, R.string.mode_pool_toast, Toast.LENGTH_SHORT).show()
+        hideClassifyUndoBar()
+        updateClassifyRemaining()
+        if (!fromClassify) topToast(R.string.mode_pool_toast, Toast.LENGTH_SHORT)
         revealOverlayUi()
     }
 
@@ -550,6 +587,8 @@ class MainActivity : AppCompatActivity() {
             prefs.edit().putString(MODE_KEY, MODE_FIXED).apply()
             for (i in 0 until activePanelCount) players[i]?.setRepeatMode(Player.REPEAT_MODE_ALL)
             updateFavoriteButtons()
+            hideClassifyUndoBar()
+            updateClassifyRemaining()
             revealOverlayUi()
             return
         }
@@ -577,11 +616,7 @@ class MainActivity : AppCompatActivity() {
                 override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
                     if (isPoolLike()) {
                         if (index < activePanelCount && heldPanels[index]) {
-                            Toast.makeText(
-                                this@MainActivity,
-                                R.string.panel_held_tap_toast,
-                                Toast.LENGTH_SHORT
-                            ).show()
+                            topToast(R.string.panel_held_tap_toast, Toast.LENGTH_SHORT)
                         } else {
                             swapPanelToRandomClip(index)
                         }
@@ -593,7 +628,11 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 override fun onDoubleTap(e: MotionEvent): Boolean {
-                    if (appMode == MODE_CLASSIFY) return true
+                    if (appMode == MODE_CLASSIFY) {
+                        val toLeft = e.x < panel.playerView.width / 2f
+                        seekPanelBy(index, if (toLeft) -SEEK_STEP_MS else SEEK_STEP_MS)
+                        return true
+                    }
                     if (!hasStorageAccess()) {
                         requestStorageAccess()
                         return true
@@ -897,7 +936,7 @@ class MainActivity : AppCompatActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R &&
             !Environment.isExternalStorageManager()
         ) {
-            Toast.makeText(this, R.string.storage_needed_for_org, Toast.LENGTH_LONG).show()
+            topToast(R.string.storage_needed_for_org, Toast.LENGTH_LONG)
             return
         }
         val path = prefs.getString(uriKey(index), null)?.let { Uri.parse(it).path } ?: return
@@ -906,33 +945,82 @@ class MainActivity : AppCompatActivity() {
             // sacamos del pool de la sesion y pasamos al siguiente.
             if (appMode == MODE_CLASSIFY) {
                 setPoolClips(poolClips.filterNot { it == path })
+                updateClassifyRemaining()
                 if (!heldPanels[index]) swapPanelToRandomClip(index)
             } else {
-                Toast.makeText(
-                    this,
-                    getString(R.string.favorite_already, VideoFileOps.FAVORITES_DIR_NAME),
-                    Toast.LENGTH_SHORT
-                ).show()
+                topToast(getString(R.string.favorite_already, VideoFileOps.FAVORITES_DIR_NAME), Toast.LENGTH_SHORT)
             }
             flashPanelFeedback()
             return
         }
+        val originalDir = File(path).parentFile?.absolutePath
         val newFile = VideoFileOps.moveToFavorites(this, path)
         if (newFile == null) {
-            Toast.makeText(this, R.string.favorite_move_failed, Toast.LENGTH_SHORT).show()
+            topToast(R.string.favorite_move_failed, Toast.LENGTH_SHORT)
             return
         }
         VideoFileOps.updateReferences(this, path, newFile)
         setPoolClips(poolClips.filterNot { it == path || it == newFile.absolutePath })
         panels[index].labelFilename.text = newFile.name
-        Toast.makeText(
-            this,
-            getString(R.string.favorite_move_done, VideoFileOps.FAVORITES_DIR_NAME),
-            Toast.LENGTH_SHORT
-        ).show()
+        if (appMode == MODE_CLASSIFY && originalDir != null) {
+            lastClassifyUndo = ClassifyUndo(index, newFile.absolutePath, originalDir)
+            showClassifyUndoBar(getString(R.string.classify_undo_bar, VideoFileOps.FAVORITES_DIR_NAME))
+        } else {
+            topToast(getString(R.string.favorite_move_done, VideoFileOps.FAVORITES_DIR_NAME), Toast.LENGTH_SHORT)
+        }
         updateFavoriteButtons()
+        updateClassifyRemaining()
         if (appMode == MODE_CLASSIFY && !heldPanels[index]) swapPanelToRandomClip(index)
         flashPanelFeedback()
+    }
+
+    // ----- Clasificador: Deshacer + contador de pendientes -----
+
+    private fun showClassifyUndoBar(text: String) {
+        binding.classifyUndoText.text = text
+        binding.classifyUndoBar.visibility = View.VISIBLE
+        uiHandler.removeCallbacks(hideUndoBarRunnable)
+        uiHandler.postDelayed(hideUndoBarRunnable, CLASSIFY_UNDO_MS)
+    }
+
+    private fun hideClassifyUndoBar() {
+        uiHandler.removeCallbacks(hideUndoBarRunnable)
+        binding.classifyUndoBar.visibility = View.GONE
+        lastClassifyUndo = null
+    }
+
+    /** Devuelve el ultimo clip clasificado a su carpeta original y lo trae de vuelta al panel. */
+    private fun undoLastClassify() {
+        val u = lastClassifyUndo ?: return
+        lastClassifyUndo = null
+        uiHandler.removeCallbacks(hideUndoBarRunnable)
+        binding.classifyUndoBar.visibility = View.GONE
+        if (!ensureOrganizeAccess()) return
+        val back = VideoFileOps.moveToDir(this, u.movedPath, File(u.originalDir))
+        if (back == null) {
+            topToast(R.string.classify_undo_failed, Toast.LENGTH_SHORT)
+            return
+        }
+        VideoFileOps.updateReferences(this, u.movedPath, back)
+        setPoolClips((poolClips + back.absolutePath).distinct())
+        if (u.panelIndex in 0 until activePanelCount && !heldPanels[u.panelIndex]) {
+            playClipInPanel(u.panelIndex, back.absolutePath)
+        }
+        updateFavoriteButtons()
+        updateClassifyRemaining()
+        topToast(R.string.classify_undo_done, Toast.LENGTH_SHORT)
+        flashPanelFeedback()
+    }
+
+    /** Pill "Sin clasificar: N" arriba a la derecha; solo en el modo clasificador. */
+    private fun updateClassifyRemaining() {
+        val badge = binding.classifyRemaining
+        if (appMode == MODE_CLASSIFY) {
+            badge.text = getString(R.string.classify_remaining, poolClips.size)
+            badge.visibility = View.VISIBLE
+        } else {
+            badge.visibility = View.GONE
+        }
     }
 
     // ----- Categorias -----
@@ -941,7 +1029,7 @@ class MainActivity : AppCompatActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R &&
             !Environment.isExternalStorageManager()
         ) {
-            Toast.makeText(this, R.string.storage_needed_for_org, Toast.LENGTH_LONG).show()
+            topToast(R.string.storage_needed_for_org, Toast.LENGTH_LONG)
             return false
         }
         return true
@@ -1000,33 +1088,46 @@ class MainActivity : AppCompatActivity() {
             flashPanelFeedback()
             return
         }
+        val originalDir = File(path).parentFile?.absolutePath
         val newFile = if (code == null) {
             VideoFileOps.removeFromCategory(this, path)
         } else {
             VideoFileOps.moveToCategory(this, path, code)
         }
         if (newFile == null) {
-            Toast.makeText(this, R.string.categorize_failed, Toast.LENGTH_SHORT).show()
+            topToast(R.string.categorize_failed, Toast.LENGTH_SHORT)
             return
         }
         VideoFileOps.updateReferences(this, path, newFile)
+        if (appMode == MODE_CLASSIFY && originalDir != null &&
+            newFile.absolutePath != path
+        ) {
+            lastClassifyUndo = ClassifyUndo(index, newFile.absolutePath, originalDir)
+            showClassifyUndoBar(
+                if (code == null) getString(R.string.classify_undo_bar_removed)
+                else getString(R.string.classify_undo_bar, code)
+            )
+        }
         // El clip clasificado sale del pool salvo que sigas navegando su propia carpeta.
         val filtered = poolClips.filterNot { it == path || it == newFile.absolutePath }
         val belongs = clipBelongsInPool(newFile.absolutePath)
         setPoolClips(if (belongs) filtered + newFile.absolutePath else filtered)
         panels[index].labelFilename.text = newFile.name
-        Toast.makeText(
-            this,
-            if (code == null) getString(R.string.category_removed_toast)
-            else getString(R.string.categorized_toast, code),
-            Toast.LENGTH_SHORT
-        ).show()
+        // En el clasificador el feedback lo da la barra de Deshacer, no el toast.
+        if (appMode != MODE_CLASSIFY) {
+            topToast(
+                if (code == null) getString(R.string.category_removed_toast)
+                else getString(R.string.categorized_toast, code),
+                Toast.LENGTH_SHORT
+            )
+        }
         updateFavoriteButtons()
         syncControls()
         // Si el clip dejo el pool (flujo de limpieza), el panel avanza al siguiente.
         if (!belongs && isPoolLike() && !heldPanels[index]) {
             swapPanelToRandomClip(index)
         }
+        updateClassifyRemaining()
         flashPanelFeedback()
     }
 
@@ -1040,7 +1141,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
         if (selected.isNotEmpty() && candidate.isEmpty()) {
-            Toast.makeText(this, R.string.category_empty_pool, Toast.LENGTH_SHORT).show()
+            topToast(R.string.category_empty_pool, Toast.LENGTH_SHORT)
             syncControls()
             return
         }
@@ -1077,7 +1178,7 @@ class MainActivity : AppCompatActivity() {
                 if (!ensureOrganizeAccess()) return@setItems
                 val dir = VideoFileOps.categoryDir(cats[which].code)
                 if (!dir.isDirectory || dir.listFiles()?.any { it.isFile } != true) {
-                    Toast.makeText(this, R.string.category_empty_pool, Toast.LENGTH_SHORT).show()
+                    topToast(R.string.category_empty_pool, Toast.LENGTH_SHORT)
                     return@setItems
                 }
                 categoryFilter.clear()
@@ -1287,6 +1388,8 @@ class MainActivity : AppCompatActivity() {
         binding.emptyState.root.visibility = View.GONE
         startSessionTimer()
         updateFavoriteButtons()
+        hideClassifyUndoBar()
+        updateClassifyRemaining()
         // No abrimos el panel de controles al entrar: solo un flash de los nombres.
         // El panel aparece unicamente al deslizar hacia arriba.
         flashPanelFeedback()
@@ -1302,6 +1405,8 @@ class MainActivity : AppCompatActivity() {
             panels[i].btnCategorize.visibility = View.GONE
             panels[i].categoryButtons.visibility = View.GONE
         }
+        hideClassifyUndoBar()
+        binding.classifyRemaining.visibility = View.GONE
     }
 
     private fun startSessionTimer() {
@@ -1383,11 +1488,7 @@ class MainActivity : AppCompatActivity() {
                 override fun onPlayerError(error: PlaybackException) {
                     panel.progressBar.visibility = View.GONE
                     panel.labelFilename.text = getString(R.string.video_load_error)
-                    Toast.makeText(
-                        this@MainActivity,
-                        getString(R.string.video_error_toast, i + 1),
-                        Toast.LENGTH_SHORT
-                    ).show()
+                    topToast(getString(R.string.video_error_toast, i + 1), Toast.LENGTH_SHORT)
                 }
             })
             players[i] = player
@@ -1521,11 +1622,15 @@ class MainActivity : AppCompatActivity() {
         val cached = MediaPool.cachedFor(folder)
         if (cached.isNotEmpty()) {
             setPoolClips(cached)
+            updateClassifyRemaining()
             return
         }
         Thread {
             val clips = MediaPool.scan(folder)
-            runOnUiThread { setPoolClips(clips) }
+            runOnUiThread {
+                setPoolClips(clips)
+                updateClassifyRemaining()
+            }
         }.start()
     }
 
@@ -1651,20 +1756,16 @@ class MainActivity : AppCompatActivity() {
             .putString(MODE_KEY, MODE_POOL)
             .putString(POOL_FOLDER_KEY, folder)
             .apply()
-        Toast.makeText(this, R.string.scanning_folder, Toast.LENGTH_SHORT).show()
+        topToast(R.string.scanning_folder, Toast.LENGTH_SHORT)
         Thread {
             val clips = MediaPool.scan(folder)
             runOnUiThread {
                 setPoolClips(clips)
                 if (clips.size < MIN_PANELS) {
-                    Toast.makeText(this, R.string.pool_too_few, Toast.LENGTH_LONG).show()
+                    topToast(R.string.pool_too_few, Toast.LENGTH_LONG)
                     return@runOnUiThread
                 }
-                Toast.makeText(
-                    this,
-                    getString(R.string.pool_found_toast, clips.size),
-                    Toast.LENGTH_SHORT
-                ).show()
+                topToast(getString(R.string.pool_found_toast, clips.size), Toast.LENGTH_SHORT)
                 startPoolPlayback()
             }
         }.start()
@@ -1682,17 +1783,19 @@ class MainActivity : AppCompatActivity() {
             .putBoolean(AUTO_ROTATE_KEY, false)
             .apply()
         uiHandler.removeCallbacks(autoRotateRunnable)
-        Toast.makeText(this, R.string.scanning_folder, Toast.LENGTH_SHORT).show()
+        topToast(R.string.scanning_folder, Toast.LENGTH_SHORT)
         Thread {
             val clips = MediaPool.scan(folder)
             runOnUiThread {
                 setPoolClips(clips)
                 if (clips.size < 2) {
-                    Toast.makeText(this, R.string.pool_too_few, Toast.LENGTH_LONG).show()
+                    topToast(R.string.pool_too_few, Toast.LENGTH_LONG)
                     return@runOnUiThread
                 }
                 startPoolPlayback(forceCount = 2)
-                Toast.makeText(this, R.string.mode_classify_toast, Toast.LENGTH_SHORT).show()
+                hideClassifyUndoBar()
+                updateClassifyRemaining()
+                topToast(R.string.mode_classify_toast, Toast.LENGTH_SHORT)
             }
         }.start()
     }
@@ -1799,25 +1902,49 @@ class MainActivity : AppCompatActivity() {
         if (!isPoolLike()) return
         if (index !in 0 until activePanelCount) return
         if (heldPanels[index]) return
-        val player = players[index] ?: return
+        if (players[index] == null) return
         val next = randomClipExcluding(currentlyShownPaths()) ?: run {
             if (appMode == MODE_CLASSIFY) {
-                Toast.makeText(this, R.string.classify_done_toast, Toast.LENGTH_SHORT).show()
+                topToast(R.string.classify_done_toast, Toast.LENGTH_SHORT)
             }
             return
         }
-        val uri = Uri.fromFile(File(next))
+        playClipInPanel(index, next)
+    }
+
+    /** Carga un clip concreto en un panel (comparten swap aleatorio y Deshacer). */
+    private fun playClipInPanel(index: Int, path: String) {
+        if (index !in 0 until activePanelCount) return
+        val player = players[index] ?: return
+        val uri = Uri.fromFile(File(path))
         prefs.edit()
             .putString(uriKey(index), uri.toString())
             .remove(positionKey(index))
             .apply()
         panels[index].labelFilename.text = queryDisplayName(uri)
         panels[index].progressBar.visibility = View.VISIBLE
+        if (appMode == MODE_CLASSIFY) panels[index].holdBadge.visibility = View.GONE
         videoAspects[index] = null
         player.setMediaItem(MediaItem.fromUri(uri))
         player.prepare()
         player.playWhenReady = isPlaying
         updateFavoriteButtons()
+    }
+
+    /** Salto relativo dentro del clip de un panel (doble-tap en el clasificador). */
+    private fun seekPanelBy(index: Int, deltaMs: Long) {
+        if (index !in 0 until activePanelCount) return
+        val player = players[index] ?: return
+        val dur = player.duration
+        var target = player.currentPosition + deltaMs
+        if (target < 0L) target = 0L
+        if (dur > 0L && target > dur) target = dur
+        player.seekTo(target)
+        val badge = panels[index].holdBadge
+        badge.text = if (deltaMs < 0L) "« 10s" else "10s »"
+        badge.visibility = View.VISIBLE
+        badge.removeCallbacks(hideSeekBadge[index])
+        badge.postDelayed(hideSeekBadge[index], 700L)
     }
 
     /**
@@ -1834,11 +1961,7 @@ class MainActivity : AppCompatActivity() {
         players[index]?.setRepeatMode(
             if (held) Player.REPEAT_MODE_ALL else Player.REPEAT_MODE_OFF
         )
-        Toast.makeText(
-            this,
-            if (held) R.string.panel_hold_on_toast else R.string.panel_hold_off_toast,
-            Toast.LENGTH_SHORT
-        ).show()
+        topToast(if (held) R.string.panel_hold_on_toast else R.string.panel_hold_off_toast, Toast.LENGTH_SHORT)
         flashPanelFeedback()
     }
 
@@ -1876,7 +1999,7 @@ class MainActivity : AppCompatActivity() {
         for (i in 0 until activePanelCount) {
             players[i]?.setRepeatMode(Player.REPEAT_MODE_ALL)
         }
-        Toast.makeText(this, R.string.pinned_toast, Toast.LENGTH_SHORT).show()
+        topToast(R.string.pinned_toast, Toast.LENGTH_SHORT)
         revealOverlayUi()
     }
 
@@ -1884,7 +2007,7 @@ class MainActivity : AppCompatActivity() {
     private fun saveCurrentAsSet() {
         val uris = (0 until activePanelCount).mapNotNull { prefs.getString(uriKey(it), null) }
         if (uris.size < MIN_PANELS) {
-            Toast.makeText(this, R.string.pool_too_few, Toast.LENGTH_SHORT).show()
+            topToast(R.string.pool_too_few, Toast.LENGTH_SHORT)
             return
         }
         val input = android.widget.EditText(this).apply {
@@ -1901,11 +2024,7 @@ class MainActivity : AppCompatActivity() {
                 val sets = VideoSetsStore.load(this)
                 sets.add(VideoSet(System.currentTimeMillis(), name, uris))
                 VideoSetsStore.save(this, sets)
-                Toast.makeText(
-                    this,
-                    getString(R.string.set_saved_toast, name),
-                    Toast.LENGTH_SHORT
-                ).show()
+                topToast(getString(R.string.set_saved_toast, name), Toast.LENGTH_SHORT)
             }
             .setNegativeButton(R.string.cancel, null)
             .show()
@@ -1974,5 +2093,11 @@ class MainActivity : AppCompatActivity() {
 
         /** Botones de categoria por fila en el modo clasificador. */
         private const val CAT_BUTTONS_PER_ROW = 4
+
+        /** Salto del doble-tap en el clasificador. */
+        private const val SEEK_STEP_MS = 10_000L
+
+        /** Cuanto dura visible la barra de Deshacer del clasificador. */
+        private const val CLASSIFY_UNDO_MS = 6_000L
     }
 }

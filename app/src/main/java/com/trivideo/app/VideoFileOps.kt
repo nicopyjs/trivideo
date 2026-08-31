@@ -54,6 +54,26 @@ object VideoFileOps {
         }
     }
 
+    /**
+     * Mueve el archivo a `dir` (la crea si hace falta). Generico: sirve para deshacer
+     * una clasificacion devolviendo el clip a su carpeta original. Devuelve el nuevo
+     * File o null.
+     */
+    fun moveToDir(context: Context, path: String, dir: File): File? {
+        val src = File(path)
+        if (!src.exists()) return null
+        if (src.parentFile?.absolutePath == dir.absolutePath) return src
+        if (!dir.exists() && !dir.mkdirs()) return null
+        val target = uniqueTarget(File(dir, src.name))
+        val ok = src.renameTo(target) || copyThenDelete(src, target)
+        return if (ok) {
+            scan(context, src.absolutePath, target.absolutePath)
+            target
+        } else {
+            null
+        }
+    }
+
     /** Saca el archivo de su categoria y lo deja en /Favoritos a secas. Devuelve el nuevo File o null. */
     fun removeFromCategory(context: Context, path: String): File? {
         if (categoryOf(path) == null) return File(path)
