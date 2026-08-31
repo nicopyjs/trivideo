@@ -590,6 +590,8 @@ class MainActivity : AppCompatActivity() {
             panel.btnCatAn.setOnClickListener { toggleCategory(index, "an") }
             panel.btnCatTt.setOnClickListener { toggleCategory(index, "tt") }
             panel.btnCatCs.setOnClickListener { toggleCategory(index, "cs") }
+            panel.btnCatCu.setOnClickListener { toggleCategory(index, "cu") }
+            panel.btnCatOr.setOnClickListener { toggleCategory(index, "or") }
         }
     }
 
@@ -769,6 +771,8 @@ class MainActivity : AppCompatActivity() {
             styleCategoryButton(panels[i].btnCatAn, cat == "an")
             styleCategoryButton(panels[i].btnCatTt, cat == "tt")
             styleCategoryButton(panels[i].btnCatCs, cat == "cs")
+            styleCategoryButton(panels[i].btnCatCu, cat == "cu")
+            styleCategoryButton(panels[i].btnCatOr, cat == "or")
         }
     }
 
@@ -827,6 +831,20 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
+     * Un clip pertenece al pool actual si esta bajo la carpeta del pool y NO dentro
+     * de una subcarpeta de categoria distinta a la raiz del pool. Refleja lo que hace
+     * MediaPool.scan(): al navegar /Favoritos, lo ya clasificado no vuelve a salir.
+     */
+    private fun clipBelongsInPool(absPath: String): Boolean {
+        val folder = poolFolder ?: return false
+        val rootPath = File(folder).absolutePath
+        if (absPath != rootPath && !absPath.startsWith(rootPath + File.separator)) return false
+        val catDir = VideoFileOps.categoryOf(absPath)
+            ?.let { VideoFileOps.categoryDir(it).absolutePath }
+        return catDir == null || catDir == rootPath
+    }
+
+    /**
      * Boton de categoria: si el clip ya esta en `code` lo saca (vuelve a /Favoritos);
      * si no, lo mueve a /Favoritos/<code>. Toggle simple, como la estrella.
      */
@@ -845,15 +863,10 @@ class MainActivity : AppCompatActivity() {
             return
         }
         VideoFileOps.updateReferences(this, path, newFile)
-        val underPool = poolFolder?.let {
-            newFile.absolutePath.startsWith(File(it).absolutePath + File.separator)
-        } == true
-        val newList = if (underPool) {
-            poolClips.map { if (it == path) newFile.absolutePath else it }
-        } else {
-            poolClips.filterNot { it == path }
-        }
-        setPoolClips(newList)
+        // El clip clasificado sale del pool salvo que sigas navegando su propia carpeta.
+        val filtered = poolClips.filterNot { it == path || it == newFile.absolutePath }
+        val belongs = clipBelongsInPool(newFile.absolutePath)
+        setPoolClips(if (belongs) filtered + newFile.absolutePath else filtered)
         panels[index].labelFilename.text = newFile.name
         Toast.makeText(
             this,
@@ -863,6 +876,10 @@ class MainActivity : AppCompatActivity() {
         ).show()
         updateFavoriteButtons()
         syncControls()
+        // Si el clip dejo el pool (flujo de limpieza), el panel avanza al siguiente.
+        if (!belongs && appMode == MODE_POOL && !heldPanels[index]) {
+            swapPanelToRandomClip(index)
+        }
         flashPanelFeedback()
     }
 

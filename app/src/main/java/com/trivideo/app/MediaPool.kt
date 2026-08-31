@@ -7,6 +7,10 @@ import java.io.File
  * recursivamente (incluyendo subcarpetas) y junta todos los archivos de video.
  * El resultado se cachea en memoria para la ultima carpeta escaneada, asi los swaps
  * de panel y la auto-rotacion no vuelven a tocar el disco.
+ *
+ * Excepcion: las subcarpetas de categoria (/Favoritos/<code>) se saltan siempre,
+ * salvo que la carpeta escaneada SEA una de ellas (flujo "Ver categoria"). Asi, un
+ * video ya clasificado deja de aparecer cuando navegas /Favoritos o el almacenamiento.
  */
 object MediaPool {
 
@@ -24,9 +28,16 @@ object MediaPool {
     fun scan(folderPath: String): List<String> {
         val root = File(folderPath)
         if (!root.isDirectory) return emptyList()
+        val rootPath = root.absolutePath
+        val categoryDirs = CategoryStore.ALL
+            .map { VideoFileOps.categoryDir(it.code).absolutePath }
+            .toSet()
         val out = ArrayList<String>()
         root.walkTopDown()
-            .onEnter { !it.isHidden }
+            .onEnter { dir ->
+                !dir.isHidden &&
+                    (dir.absolutePath == rootPath || dir.absolutePath !in categoryDirs)
+            }
             .forEach { file ->
                 if (file.isFile && !file.isHidden &&
                     file.extension.lowercase() in VIDEO_EXTENSIONS

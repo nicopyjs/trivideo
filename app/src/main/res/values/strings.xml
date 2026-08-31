@@ -94,9 +94,13 @@
     <string name="cat_an_short">AN</string>
     <string name="cat_tt_short">TT</string>
     <string name="cat_cs_short">CS</string>
+    <string name="cat_cu_short">CU</string>
+    <string name="cat_or_short">OR</string>
     <string name="cat_an_desc">Clasificar en categoría AN</string>
     <string name="cat_tt_desc">Clasificar en categoría TT</string>
     <string name="cat_cs_desc">Clasificar en categoría CS</string>
+    <string name="cat_cu_desc">Clasificar en categoría CU</string>
+    <string name="cat_or_desc">Clasificar en categoría OR</string>
     <string name="layout_auto">Auto</string>
     <string name="layout_one_col">Columna</string>
     <string name="layout_one_row">Fila</string>
