@@ -22,6 +22,7 @@ import android.provider.Settings
 import android.view.DragEvent
 import android.view.GestureDetector
 import android.view.Gravity
+import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
@@ -97,8 +98,12 @@ class MainActivity : AppCompatActivity() {
     private var classifyCursor: Int = 0
     private val heldPanels = BooleanArray(MAX_PANELS)
 
-    /** Ultima clasificacion/archivo hecho en el clasificador, para el boton Deshacer. */
-    private var lastClassifyUndo: ClassifyUndo? = null
+    /** Clasificaciones/archivados de la sesion (las mas recientes al final), para Deshacer en cadena. */
+    private val classifyUndoStack = ArrayDeque<ClassifyUndo>()
+    /** Clips ya clasificados en esta sesion del clasificador. */
+    private var classifyDoneCount: Int = 0
+    /** Clips que cada panel mostro antes del actual, para volver con swipe a la derecha. */
+    private val panelHistory = Array(MAX_PANELS) { ArrayDeque<String>() }
 
     private data class ClassifyUndo(
         val panelIndex: Int,
@@ -142,6 +147,24 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             uiHandler.postDelayed(this, autoRotateIntervalSec * 1000L)
+        }
+    }
+
+    /** Linea de progreso de cada panel (escala en X); se refresca 4 veces por segundo. */
+    private val progressRunnable = object : Runnable {
+        override fun run() {
+            for (i in 0 until activePanelCount) {
+                val player = players[i] ?: continue
+                val dur = player.duration
+                val bar = panels[i].panelProgress
+                bar.pivotX = 0f
+                bar.scaleX = if (dur > 0L) {
+                    (player.currentPosition.toFloat() / dur).coerceIn(0f, 1f)
+                } else {
+                    0f
+                }
+            }
+            uiHandler.postDelayed(this, PROGRESS_TICK_MS)
         }
     }
 
@@ -294,6 +317,7 @@ class MainActivity : AppCompatActivity() {
         }
         cb.btnLock.setOnClickListener { setLocked(true) }
 
+        cb.btnShuffleAll.setOnClickListener { shuffleAllPanels() }
         cb.btnPickFolder.setOnClickListener { launchFolderPicker() }
         cb.btnChangeVideos.setOnClickListener { launchPickerForAll() }
         cb.btnSets.setOnClickListener {
@@ -487,6 +511,7 @@ class MainActivity : AppCompatActivity() {
         cb.btnPlayPause.setImageResource(
             if (isPlaying) R.drawable.ic_pause_24 else R.drawable.ic_play_24
         )
+        cb.btnShuffleAll.visibility = if (isPoolLike()) View.VISIBLE else View.GONE
 
         rebuildCategoryChips()
 
@@ -576,7 +601,7 @@ class MainActivity : AppCompatActivity() {
             uiHandler.postDelayed(autoRotateRunnable, autoRotateIntervalSec * 1000L)
         }
         updateFavoriteButtons()
-        hideClassifyUndoBar()
+        resetClassifyUndo()
         updateClassifyRemaining()
         if (!fromClassify) topToast(R.string.mode_pool_toast, Toast.LENGTH_SHORT)
         revealOverlayUi()
@@ -590,7 +615,7 @@ class MainActivity : AppCompatActivity() {
             prefs.edit().putString(MODE_KEY, MODE_FIXED).apply()
             for (i in 0 until activePanelCount) players[i]?.setRepeatMode(Player.REPEAT_MODE_ALL)
             updateFavoriteButtons()
-            hideClassifyUndoBar()
+            resetClassifyUndo()
             updateClassifyRemaining()
             revealOverlayUi()
             return
@@ -653,7 +678,8 @@ class MainActivity : AppCompatActivity() {
                     when (appMode) {
                         MODE_POOL -> toggleHold(index)
                         MODE_FIXED -> startPanelDrag(index)
-                        // Clasificador: sin long-press.
+                        // Clasificador: mantener presionado = escuchar el audio de este panel.
+                        MODE_CLASSIFY -> setPanelAudio(index)
                     }
                 }
 
@@ -664,11 +690,24 @@ class MainActivity : AppCompatActivity() {
                     velocityY: Float
                 ): Boolean {
                     val dy = e2.y - (e1?.y ?: e2.y)
-                    if (abs(dy) > abs(e2.x - (e1?.x ?: e2.x)) &&
-                        abs(dy) > dp(56f)
-                    ) {
+                    val dx = e2.x - (e1?.x ?: e2.x)
+                    if (abs(dy) > abs(dx) && abs(dy) > dp(56f)) {
                         // Deslizar arriba/abajo solo muestra u oculta la barra, sin cambiar nada.
                         if (dy < 0) revealOverlayUi() else hideOverlayUi()
+                        return true
+                    }
+                    if (isPoolLike() && abs(dx) > abs(dy) && abs(dx) > dp(56f)) {
+                        // Izquierda = siguiente clip (sin la espera del tap), derecha = el anterior.
+                        if (dx < 0) {
+                            if (index < activePanelCount && heldPanels[index]) {
+                                topToast(R.string.panel_held_tap_toast, Toast.LENGTH_SHORT)
+                            } else {
+                                swapPanelToRandomClip(index)
+                            }
+                        } else {
+                            panelBack(index)
+                        }
+                        flashPanelFeedback()
                         return true
                     }
                     return false
@@ -680,6 +719,7 @@ class MainActivity : AppCompatActivity() {
             }
             panel.root.setOnDragListener { view, event -> onPanelDragEvent(index, view, event) }
             panel.btnFavorite.setOnClickListener { favoritePanelVideo(index) }
+            panel.btnAudio.setOnClickListener { setPanelAudio(index) }
             panel.btnCategorize.setOnClickListener { showCategorizeSheet(index) }
             buildCategoryButtons(index)
         }
@@ -824,6 +864,36 @@ class MainActivity : AppCompatActivity() {
         for (i in 0 until activePanelCount) {
             panels[i].activeBorder.visibility = if (i == activeIndex) View.VISIBLE else View.GONE
         }
+        updateAudioButtons()
+    }
+
+    /** Icono de audio de cada panel: violeta + parlante si es el que suena, apagado si no. */
+    private fun updateAudioButtons() {
+        for (i in 0 until MAX_PANELS) {
+            val btn = panels[i].btnAudio
+            if (i >= activePanelCount) {
+                btn.visibility = View.GONE
+                continue
+            }
+            val on = i == activeIndex
+            btn.visibility = View.VISIBLE
+            btn.setImageResource(if (on) R.drawable.ic_volume_up_24 else R.drawable.ic_volume_off_24)
+            btn.setColorFilter(getColor(if (on) R.color.brand_violet else R.color.text_primary))
+            btn.alpha = if (on) 1f else 0.5f
+        }
+    }
+
+    /** Pasa el audio a este panel (o lo silencia si ya era el que sonaba). */
+    private fun setPanelAudio(index: Int) {
+        if (index !in 0 until activePanelCount) return
+        activeIndex = if (activeIndex == index) -1 else index
+        applyVolumes()
+        updatePanelHighlights()
+        flashPanelFeedback()
+    }
+
+    private fun haptic(view: View) {
+        view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
     }
 
     private fun toggleMasterPlayPause() {
@@ -947,6 +1017,8 @@ class MainActivity : AppCompatActivity() {
             // Ya esta en /Favoritos raiz. En clasificador cuenta como "archivado": lo
             // sacamos del pool de la sesion y pasamos al siguiente.
             if (appMode == MODE_CLASSIFY) {
+                classifyDoneCount++
+                haptic(panels[index].root)
                 setPoolClips(poolClips.filterNot { it == path })
                 updateClassifyRemaining()
                 if (!heldPanels[index]) swapPanelToRandomClip(index)
@@ -966,8 +1038,12 @@ class MainActivity : AppCompatActivity() {
         setPoolClips(poolClips.filterNot { it == path || it == newFile.absolutePath })
         panels[index].labelFilename.text = newFile.name
         if (appMode == MODE_CLASSIFY && originalDir != null) {
-            lastClassifyUndo = ClassifyUndo(index, newFile.absolutePath, originalDir)
-            showClassifyUndoBar(getString(R.string.classify_undo_bar, VideoFileOps.FAVORITES_DIR_NAME))
+            classifyDoneCount++
+            haptic(panels[index].root)
+            pushClassifyUndo(
+                ClassifyUndo(index, newFile.absolutePath, originalDir),
+                getString(R.string.classify_undo_bar, VideoFileOps.FAVORITES_DIR_NAME)
+            )
         } else {
             topToast(getString(R.string.favorite_move_done, VideoFileOps.FAVORITES_DIR_NAME), Toast.LENGTH_SHORT)
         }
@@ -979,23 +1055,39 @@ class MainActivity : AppCompatActivity() {
 
     // ----- Clasificador: Deshacer + contador de pendientes -----
 
+    /** Registra una clasificacion deshacible y muestra la barra (tope [CLASSIFY_UNDO_MAX]). */
+    private fun pushClassifyUndo(entry: ClassifyUndo, text: String) {
+        classifyUndoStack.addLast(entry)
+        if (classifyUndoStack.size > CLASSIFY_UNDO_MAX) classifyUndoStack.removeFirst()
+        showClassifyUndoBar(text)
+    }
+
     private fun showClassifyUndoBar(text: String) {
         binding.classifyUndoText.text = text
+        val n = classifyUndoStack.size
+        binding.btnClassifyUndo.text =
+            if (n > 1) getString(R.string.undo_with_count, n) else getString(R.string.undo)
         binding.classifyUndoBar.visibility = View.VISIBLE
         uiHandler.removeCallbacks(hideUndoBarRunnable)
         uiHandler.postDelayed(hideUndoBarRunnable, CLASSIFY_UNDO_MS)
     }
 
+    /** Solo oculta la barra; el historial de Deshacer se conserva. */
     private fun hideClassifyUndoBar() {
         uiHandler.removeCallbacks(hideUndoBarRunnable)
         binding.classifyUndoBar.visibility = View.GONE
-        lastClassifyUndo = null
+    }
+
+    /** Oculta la barra y olvida el historial y el contador (al entrar/salir del clasificador). */
+    private fun resetClassifyUndo() {
+        hideClassifyUndoBar()
+        classifyUndoStack.clear()
+        classifyDoneCount = 0
     }
 
     /** Devuelve el ultimo clip clasificado a su carpeta original y lo trae de vuelta al panel. */
     private fun undoLastClassify() {
-        val u = lastClassifyUndo ?: return
-        lastClassifyUndo = null
+        val u = classifyUndoStack.lastOrNull() ?: return
         uiHandler.removeCallbacks(hideUndoBarRunnable)
         binding.classifyUndoBar.visibility = View.GONE
         if (!ensureOrganizeAccess()) return
@@ -1004,6 +1096,9 @@ class MainActivity : AppCompatActivity() {
             topToast(R.string.classify_undo_failed, Toast.LENGTH_SHORT)
             return
         }
+        classifyUndoStack.removeLast()
+        if (classifyDoneCount > 0) classifyDoneCount--
+        haptic(binding.root)
         VideoFileOps.updateReferences(this, u.movedPath, back)
         setPoolClips((poolClips + back.absolutePath).distinct())
         if (u.panelIndex in 0 until activePanelCount && !heldPanels[u.panelIndex]) {
@@ -1013,13 +1108,17 @@ class MainActivity : AppCompatActivity() {
         updateClassifyRemaining()
         topToast(R.string.classify_undo_done, Toast.LENGTH_SHORT)
         flashPanelFeedback()
+        // Si queda historial, la barra sigue a mano para seguir deshaciendo en cadena.
+        if (classifyUndoStack.isNotEmpty()) {
+            showClassifyUndoBar(getString(R.string.classify_undo_done))
+        }
     }
 
-    /** Pill "Sin clasificar: N" arriba a la derecha; solo en el modo clasificador. */
+    /** Pill "Sin clasificar: N · Hechos: k" arriba a la derecha; solo en el modo clasificador. */
     private fun updateClassifyRemaining() {
         val badge = binding.classifyRemaining
         if (appMode == MODE_CLASSIFY) {
-            badge.text = getString(R.string.classify_remaining, poolClips.size)
+            badge.text = getString(R.string.classify_remaining_done, poolClips.size, classifyDoneCount)
             badge.visibility = View.VISIBLE
         } else {
             badge.visibility = View.GONE
@@ -1105,8 +1204,10 @@ class MainActivity : AppCompatActivity() {
         if (appMode == MODE_CLASSIFY && originalDir != null &&
             newFile.absolutePath != path
         ) {
-            lastClassifyUndo = ClassifyUndo(index, newFile.absolutePath, originalDir)
-            showClassifyUndoBar(
+            classifyDoneCount++
+            haptic(panels[index].root)
+            pushClassifyUndo(
+                ClassifyUndo(index, newFile.absolutePath, originalDir),
                 if (code == null) getString(R.string.classify_undo_bar_removed)
                 else getString(R.string.classify_undo_bar, code)
             )
@@ -1290,6 +1391,7 @@ class MainActivity : AppCompatActivity() {
         appMode = MODE_FIXED
         uiHandler.removeCallbacks(autoRotateRunnable)
         clearHeld()
+        panelHistory.forEach { it.clear() }
 
         val editor = prefs.edit()
         editor.putString(MODE_KEY, MODE_FIXED)
@@ -1407,8 +1509,9 @@ class MainActivity : AppCompatActivity() {
             panels[i].btnFavorite.visibility = View.GONE
             panels[i].btnCategorize.visibility = View.GONE
             panels[i].categoryButtons.visibility = View.GONE
+            panels[i].btnAudio.visibility = View.GONE
         }
-        hideClassifyUndoBar()
+        resetClassifyUndo()
         binding.classifyRemaining.visibility = View.GONE
     }
 
@@ -1603,6 +1706,8 @@ class MainActivity : AppCompatActivity() {
 
         createPlayers()
         maybeRebuildGrid()
+        uiHandler.removeCallbacks(progressRunnable)
+        uiHandler.post(progressRunnable)
 
         if (hasAnyVideo(savedUris)) {
             showPlayersUi()
@@ -1798,7 +1903,7 @@ class MainActivity : AppCompatActivity() {
                     return@runOnUiThread
                 }
                 startPoolPlayback(forceCount = 2)
-                hideClassifyUndoBar()
+                resetClassifyUndo()
                 updateClassifyRemaining()
                 topToast(R.string.mode_classify_toast, Toast.LENGTH_SHORT)
             }
@@ -1836,6 +1941,7 @@ class MainActivity : AppCompatActivity() {
         currentGridShape = null
         isPlaying = true
         clearHeld()
+        panelHistory.forEach { it.clear() }
         releasePlayers()
         createPlayers()
         maybeRebuildGrid()
@@ -1960,9 +2066,17 @@ class MainActivity : AppCompatActivity() {
     }
 
     /** Carga un clip concreto en un panel (comparten swap aleatorio y Deshacer). */
-    private fun playClipInPanel(index: Int, path: String) {
+    private fun playClipInPanel(index: Int, path: String, recordHistory: Boolean = true) {
         if (index !in 0 until activePanelCount) return
         val player = players[index] ?: return
+        if (recordHistory) {
+            val current = prefs.getString(uriKey(index), null)?.let { Uri.parse(it).path }
+            if (current != null && current != path) {
+                val history = panelHistory[index]
+                history.addLast(current)
+                if (history.size > PANEL_HISTORY_MAX) history.removeFirst()
+            }
+        }
         val uri = Uri.fromFile(File(path))
         prefs.edit()
             .putString(uriKey(index), uri.toString())
@@ -2010,6 +2124,34 @@ class MainActivity : AppCompatActivity() {
         )
         topToast(if (held) R.string.panel_hold_on_toast else R.string.panel_hold_off_toast, Toast.LENGTH_SHORT)
         flashPanelFeedback()
+    }
+
+    /** Cambia de una vez el clip de todos los paneles que no estan retenidos. */
+    private fun shuffleAllPanels() {
+        if (!isPoolLike()) return
+        for (i in 0 until activePanelCount) swapPanelToRandomClip(i)
+        flashPanelFeedback()
+    }
+
+    /** Vuelve al clip que este panel mostraba antes (swipe a la derecha). */
+    private fun panelBack(index: Int) {
+        if (!isPoolLike()) return
+        if (index !in 0 until activePanelCount) return
+        if (heldPanels[index]) {
+            topToast(R.string.panel_held_tap_toast, Toast.LENGTH_SHORT)
+            return
+        }
+        val history = panelHistory[index]
+        val shown = currentlyShownPaths()
+        while (history.isNotEmpty()) {
+            val prev = history.removeLast()
+            // Descarta lo que ya no existe en el pool (clasificado/movido) o esta en otro panel.
+            if (prev in poolClipsSet && prev !in shown) {
+                playClipInPanel(index, prev, recordHistory = false)
+                return
+            }
+        }
+        topToast(R.string.no_previous_clip, Toast.LENGTH_SHORT)
     }
 
     private fun clearHeld() {
@@ -2146,5 +2288,14 @@ class MainActivity : AppCompatActivity() {
 
         /** Cuanto dura visible la barra de Deshacer del clasificador. */
         private const val CLASSIFY_UNDO_MS = 6_000L
+
+        /** Cuantas clasificaciones se pueden deshacer en cadena. */
+        private const val CLASSIFY_UNDO_MAX = 30
+
+        /** Cuantos clips recuerda cada panel para "anterior". */
+        private const val PANEL_HISTORY_MAX = 15
+
+        /** Refresco de la linea de progreso de los paneles. */
+        private const val PROGRESS_TICK_MS = 250L
     }
 }

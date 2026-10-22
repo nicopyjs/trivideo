@@ -82,7 +82,7 @@
     <string name="gesture_hint_tap">Un toque · siguiente clip al azar</string>
     <string name="gesture_hint_long">Mantener presionado · retener o soltar el panel</string>
     <string name="gesture_hint_double">Doble toque · elegir un video a mano</string>
-    <string name="gesture_hint_swipe">Deslizar hacia arriba · abrir los controles</string>
+    <string name="gesture_hint_swipe">Deslizar arriba · controles\nDeslizar a los lados · siguiente / anterior clip</string>
     <string name="gesture_hint_ok">Entendido</string>
     <string name="section_categories">Categorías</string>
     <string name="category_none">Sin categoría</string>
@@ -98,6 +98,11 @@
     <string name="classify_done_toast">Terminaste esta carpeta</string>
     <string name="classify_remaining">Sin clasificar: %1$d</string>
     <string name="undo">Deshacer</string>
+    <string name="undo_with_count">Deshacer (%1$d)</string>
+    <string name="classify_remaining_done">Sin clasificar: %1$d · Hechos: %2$d</string>
+    <string name="audio_action">Audio de este panel</string>
+    <string name="shuffle_all">Cambiar todos los clips</string>
+    <string name="no_previous_clip">No hay clip anterior en este panel</string>
     <string name="classify_undo_bar">Movido a /%1$s</string>
     <string name="classify_undo_bar_removed">Sacado de la categoría</string>
     <string name="classify_undo_done">Se deshizo el movimiento</string>

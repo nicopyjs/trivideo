@@ -88,6 +88,31 @@
         android:contentDescription="@string/categorize_action"
         android:visibility="gone" />
 
+    <!-- Audio de este panel (solo suena un panel a la vez). Siempre visible. -->
+    <ImageButton
+        android:id="@+id/btnAudio"
+        android:layout_width="44dp"
+        android:layout_height="44dp"
+        android:layout_gravity="bottom|end"
+        android:layout_margin="6dp"
+        android:background="@drawable/circle_btn_bg"
+        android:foreground="?attr/selectableItemBackgroundBorderless"
+        android:scaleType="center"
+        android:src="@drawable/ic_volume_off_24"
+        android:alpha="0.5"
+        android:contentDescription="@string/audio_action"
+        android:visibility="gone" />
+
+    <!-- Progreso del clip: linea fina pegada al borde inferior. Se escala en X por codigo. -->
+    <View
+        android:id="@+id/panelProgress"
+        android:layout_width="match_parent"
+        android:layout_height="3dp"
+        android:layout_gravity="bottom"
+        android:background="@color/brand_violet"
+        android:alpha="0.9"
+        android:scaleX="0" />
+
     <!-- Botones directos de categoria (grilla a lo ancho): solo visible en modo
          clasificador. Las filas y botones se agregan por codigo desde MainActivity.
          Va por encima de la estrella (marginBottom despeja sus ~50dp). -->
