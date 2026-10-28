@@ -88,7 +88,7 @@
         android:contentDescription="@string/categorize_action"
         android:visibility="gone" />
 
-    <!-- Audio de este panel (solo suena un panel a la vez). Siempre visible. -->
+    <!-- Audio de este panel (pueden sonar varios a la vez). Siempre visible. -->
     <ImageButton
         android:id="@+id/btnAudio"
         android:layout_width="44dp"

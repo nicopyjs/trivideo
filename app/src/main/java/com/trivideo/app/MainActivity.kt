@@ -75,7 +75,8 @@ class MainActivity : AppCompatActivity() {
     private var currentGridShape: Pair<Int, Int>? = null
     private var activePanelCount: Int = DEFAULT_PANEL_COUNT
 
-    private var activeIndex: Int = -1
+    /** Que paneles tienen audio (pueden sonar varios a la vez). */
+    private val audioOn = BooleanArray(MAX_PANELS)
     private var isPlaying: Boolean = true
     private var replaceTargetIndex: Int = -1
     private var volumeLevel: Int = 100
@@ -310,7 +311,7 @@ class MainActivity : AppCompatActivity() {
 
         cb.btnPlayPause.setOnClickListener { toggleMasterPlayPause() }
         cb.btnMuteAll.setOnClickListener {
-            activeIndex = -1
+            audioOn.fill(false)
             applyVolumes()
             updatePanelHighlights()
             revealOverlayUi()
@@ -827,6 +828,10 @@ class MainActivity : AppCompatActivity() {
         videoAspects[a] = videoAspects[b]
         videoAspects[b] = aspectA
 
+        val audioA = audioOn[a]
+        audioOn[a] = audioOn[b]
+        audioOn[b] = audioA
+
         val labelA = panels[a].labelFilename.text
         panels[a].labelFilename.text = panels[b].labelFilename.text
         panels[b].labelFilename.text = labelA
@@ -848,7 +853,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun onPanelSingleTap(index: Int) {
-        activeIndex = if (activeIndex == index) -1 else index
+        audioOn[index] = !audioOn[index]
         applyVolumes()
         flashPanelFeedback()
     }
@@ -856,13 +861,13 @@ class MainActivity : AppCompatActivity() {
     private fun applyVolumes() {
         val level = volumeLevel / 100f
         for (i in 0 until activePanelCount) {
-            players[i]?.volume = if (i == activeIndex) level else 0f
+            players[i]?.volume = if (audioOn[i]) level else 0f
         }
     }
 
     private fun updatePanelHighlights() {
         for (i in 0 until activePanelCount) {
-            panels[i].activeBorder.visibility = if (i == activeIndex) View.VISIBLE else View.GONE
+            panels[i].activeBorder.visibility = if (audioOn[i]) View.VISIBLE else View.GONE
         }
         updateAudioButtons()
     }
@@ -875,7 +880,7 @@ class MainActivity : AppCompatActivity() {
                 btn.visibility = View.GONE
                 continue
             }
-            val on = i == activeIndex
+            val on = audioOn[i]
             btn.visibility = View.VISIBLE
             btn.setImageResource(if (on) R.drawable.ic_volume_up_24 else R.drawable.ic_volume_off_24)
             btn.setColorFilter(getColor(if (on) R.color.brand_violet else R.color.text_primary))
@@ -886,7 +891,7 @@ class MainActivity : AppCompatActivity() {
     /** Pasa el audio a este panel (o lo silencia si ya era el que sonaba). */
     private fun setPanelAudio(index: Int) {
         if (index !in 0 until activePanelCount) return
-        activeIndex = if (activeIndex == index) -1 else index
+        audioOn[index] = !audioOn[index]
         applyVolumes()
         updatePanelHighlights()
         flashPanelFeedback()
@@ -1600,7 +1605,7 @@ class MainActivity : AppCompatActivity() {
             players[i] = player
             panel.playerView.player = player
         }
-        activeIndex = -1
+        audioOn.fill(false)
         binding.controlBar.btnPlayPause.setImageResource(
             if (isPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play
         )

@@ -12,7 +12,7 @@
     <string name="downloading_update">Descargando actualización…</string>
     <string name="update_download_failed">Falló la descarga, toca Actualizar para reintentar</string>
     <string name="dismiss">Cerrar</string>
-    <string name="volume">Volumen del video seleccionado</string>
+    <string name="volume">Volumen de los paneles con audio</string>
 
     <string name="storage_permission_title">Acceso a tus videos</string>
     <string name="storage_permission_message">TriVideo necesita acceso a todos los archivos para poder listar tus videos con miniaturas reales, sin importar en qué carpeta estén. Se abrirán los Ajustes de Android: activa \"Permitir acceso a todos los archivos\" y vuelve.</string>
@@ -100,7 +100,7 @@
     <string name="undo">Deshacer</string>
     <string name="undo_with_count">Deshacer (%1$d)</string>
     <string name="classify_remaining_done">Sin clasificar: %1$d · Hechos: %2$d</string>
-    <string name="audio_action">Audio de este panel</string>
+    <string name="audio_action">Activar o silenciar el audio de este panel</string>
     <string name="shuffle_all">Cambiar todos los clips</string>
     <string name="no_previous_clip">No hay clip anterior en este panel</string>
     <string name="classify_undo_bar">Movido a /%1$s</string>
