@@ -365,6 +365,51 @@ class MainActivity : AppCompatActivity() {
             revealOverlayUi()
         }
 
+        // Cerrar el panel: tap o deslizar hacia abajo sobre el encabezado.
+        val headerDetector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
+            override fun onDown(e: MotionEvent): Boolean = true
+            override fun onSingleTapUp(e: MotionEvent): Boolean {
+                hideOverlayUi()
+                return true
+            }
+
+            override fun onFling(
+                e1: MotionEvent?, e2: MotionEvent, velocityX: Float, velocityY: Float
+            ): Boolean {
+                if (velocityY > 0 && e2.y - (e1?.y ?: e2.y) > dp(20f)) {
+                    hideOverlayUi()
+                    return true
+                }
+                return false
+            }
+        })
+        cb.panelHeader.setOnTouchListener { v, event ->
+            if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+                v.parent?.requestDisallowInterceptTouchEvent(true)
+            }
+            val handled = headerDetector.onTouchEvent(event)
+            if (event.actionMasked == MotionEvent.ACTION_UP) v.performClick()
+            handled
+        }
+
+        cb.panelCountToggle.addOnButtonCheckedListener { _, checkedId, isChecked ->
+            if (syncingControls || !isChecked || appMode != MODE_POOL) return@addOnButtonCheckedListener
+            val n = when (checkedId) {
+                R.id.btnCount3 -> 3
+                R.id.btnCount4 -> 4
+                else -> 2
+            }
+            if (n == activePanelCount) return@addOnButtonCheckedListener
+            if (activeClips.size < n) {
+                topToast(getString(R.string.panel_count_too_few, activeClips.size), Toast.LENGTH_SHORT)
+                syncControls()
+                return@addOnButtonCheckedListener
+            }
+            currentGridShape = null
+            startPoolPlayback(forceCount = n)
+            revealOverlayUi()
+        }
+
         cb.layoutToggle.addOnButtonCheckedListener { _, checkedId, isChecked ->
             if (syncingControls || !isChecked) return@addOnButtonCheckedListener
             layoutMode = when (checkedId) {
@@ -495,6 +540,14 @@ class MainActivity : AppCompatActivity() {
             }
         )
         cb.btnLayoutGrid.isEnabled = activePanelCount >= 3
+        cb.panelCountSection.visibility = if (appMode == MODE_POOL) View.VISIBLE else View.GONE
+        cb.panelCountToggle.check(
+            when (activePanelCount) {
+                3 -> R.id.btnCount3
+                4 -> R.id.btnCount4
+                else -> R.id.btnCount2
+            }
+        )
 
         cb.switchAutoRotate.isChecked = autoRotateEnabled
         cb.rotateChips.check(
@@ -1324,6 +1377,9 @@ class MainActivity : AppCompatActivity() {
         val lp = panel.layoutParams as? FrameLayout.LayoutParams ?: return
         val landscape =
             resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+        // Vertical: el panel ocupa como mucho ~62% de la pantalla; el resto queda de video
+        // para poder deslizar hacia abajo y cerrarlo. Horizontal: ocupa todo el alto.
+        panel.maxHeightPx = if (landscape) 0 else (resources.displayMetrics.heightPixels * 0.62f).toInt()
         if (landscape) {
             lp.width = minOf(dp(400f), (resources.displayMetrics.widthPixels * 0.52f).toInt())
             lp.height = FrameLayout.LayoutParams.MATCH_PARENT

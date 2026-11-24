@@ -74,6 +74,8 @@
     <string name="section_mode">Modo</string>
     <string name="section_speed">Velocidad</string>
     <string name="section_layout">Distribución</string>
+    <string name="section_panel_count">Cantidad de paneles</string>
+    <string name="panel_count_too_few">Solo hay %1$d clips disponibles en este filtro</string>
     <string name="section_autorotate">Auto-rotación de paneles</string>
     <string name="section_actions">Acciones</string>
     <string name="mode_pool_label">Aleatorio</string>

@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<com.trivideo.app.MaxHeightScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
@@ -21,15 +21,17 @@
 
         <!-- Grabber + cronómetro -->
         <FrameLayout
+            android:id="@+id/panelHeader"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="12dp">
+            android:minHeight="40dp"
+            android:layout_marginBottom="4dp">
 
             <View
                 android:layout_width="36dp"
                 android:layout_height="4dp"
                 android:layout_gravity="center_horizontal"
-                android:layout_marginTop="2dp"
+                android:layout_marginTop="10dp"
                 android:background="@drawable/panel_grabber" />
 
             <TextView
@@ -284,6 +286,58 @@
 
         </HorizontalScrollView>
 
+        <!-- Cantidad de paneles (solo modo aleatorio) -->
+        <LinearLayout
+            android:id="@+id/panelCountSection"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <TextView
+                style="@style/TextAppearance.Material3.LabelMedium"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:layout_marginBottom="6dp"
+                android:textColor="@color/text_secondary"
+                android:text="@string/section_panel_count" />
+
+            <com.google.android.material.button.MaterialButtonToggleGroup
+                android:id="@+id/panelCountToggle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                app:singleSelection="true"
+                app:selectionRequired="true">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnCount2"
+                    style="@style/Widget.TriVideo.ToggleButton"
+                    android:layout_width="0dp"
+                    android:layout_height="48dp"
+                    android:layout_weight="1"
+                    android:text="2" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnCount3"
+                    style="@style/Widget.TriVideo.ToggleButton"
+                    android:layout_width="0dp"
+                    android:layout_height="48dp"
+                    android:layout_weight="1"
+                    android:text="3" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnCount4"
+                    style="@style/Widget.TriVideo.ToggleButton"
+                    android:layout_width="0dp"
+                    android:layout_height="48dp"
+                    android:layout_weight="1"
+                    android:text="4" />
+
+            </com.google.android.material.button.MaterialButtonToggleGroup>
+
+        </LinearLayout>
+
         <!-- Distribución -->
         <TextView
             style="@style/TextAppearance.Material3.LabelMedium"
@@ -494,4 +548,4 @@
 
     </LinearLayout>
 
-</ScrollView>
+</com.trivideo.app.MaxHeightScrollView>
